@@ -114,3 +114,41 @@ setup() {
 
     [[ -z "$(find "$OUT" -name '.mot-tmp.*')" ]]
 }
+
+@test "PNG with transparency stays PNG and keeps its alpha channel" {
+    make_png_alpha "$SRC/logo.png"
+
+    run -0 mot optimize "$SRC" "$OUT"
+
+    [[ ! -e "$OUT/logo.jpg" ]]
+    [[ "$(checksum "$OUT/logo.png")" == "$(checksum "$SRC/logo.png")" ]]
+}
+
+@test "opaque PNG is converted to JPEG" {
+    make_png_opaque "$SRC/photo.png"
+
+    run -0 mot optimize "$SRC" "$OUT"
+
+    [[ "$(magick identify -format '%m' "$OUT/photo.jpg")" == JPEG ]]
+    [[ ! -e "$OUT/photo.png" ]]
+}
+
+@test "--keep-png keeps opaque PNGs as PNG" {
+    make_png_opaque "$SRC/screen.png"
+
+    run -0 mot optimize --keep-png "$SRC" "$OUT"
+
+    [[ -f "$OUT/screen.png" && ! -e "$OUT/screen.jpg" ]]
+}
+
+@test "--optimize-png recompresses PNGs losslessly" {
+    make_png_alpha "$SRC/logo.png"
+    # Re-save without compression so there is something to gain
+    magick "$SRC/logo.png" -define png:compression-level=0 PNG32:"$SRC/logo.png"
+
+    run -0 mot optimize --optimize-png "$SRC" "$OUT"
+
+    (($(stat -c %s "$OUT/logo.png") < $(stat -c %s "$SRC/logo.png")))
+    [[ "$(magick compare -metric AE "$SRC/logo.png" "$OUT/logo.png" null: 2>&1)" == 0* ]]
+    [[ "$(magick identify -format '%[opaque]' "$OUT/logo.png")" == False ]]
+}

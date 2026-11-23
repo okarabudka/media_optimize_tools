@@ -31,8 +31,11 @@ make_png_opaque() {
     magick -seed 7 -size "${2:-64x48}" plasma:fractal PNG24:"$1"
 }
 
+# Noisy content with a transparent border: as JPEG it would be much smaller, but lose the alpha.
 make_png_alpha() {
-    magick -size 64x64 xc:none -fill red -draw 'circle 32,32 32,8' PNG32:"$1"
+    magick -seed 7 -size 64x64 plasma:fractal \
+        \( -size 64x64 xc:black -fill white -draw 'circle 32,32 32,8' \) \
+        -alpha off -compose CopyOpacity -composite PNG32:"$1"
 }
 
 # One-second H.264/AAC clip; extra ffmpeg output options may follow the path.

@@ -50,6 +50,8 @@ Options:
   --copy-dupes DIR            Find duplicate files and copy redundant ones to DIR
   --delete-dupes              Find duplicate files and delete redundant ones (asks confirmation)
   -y, --yes                   Answer yes to confirmations (duplicate deletion, low disk space)
+  --keep-png                  Keep all PNGs as PNG (PNGs with transparency always stay PNG)
+  --optimize-png              Recompress PNGs that stay PNG losslessly (default: leave them as is)
   --log FILE                  Append all output to FILE and terminal
   --jobs N                    Parallel workers for photo/video processing (default: 1)
   -h, --help                  Show this help
@@ -76,7 +78,7 @@ Extension filters:
     --skip-exts mov              skip MOV conversion
 
 Quality overrides (applied on top of --level, for fine-tuning):
-  --jpeg-quality N     JPEG/WEBP/PNG quality 1-100 (PNG is converted to JPEG)
+  --jpeg-quality N     JPEG/WEBP quality 1-100, also for PNGs converted to JPEG
   --max-image-dim N    Resize if longest side > N pixels
   --crf N              Video CRF 0-51 (lower = better quality)
   --preset NAME        ffmpeg preset: ultrafast fast medium slow veryslow
@@ -160,6 +162,13 @@ init_image_tool() {
     fi
 }
 run_convert() { "${IMGCMD[@]}" "$@"; }
+run_identify() {
+    if [[ "${IMGCMD[0]}" == magick ]]; then
+        magick identify "$@"
+    else
+        identify "$@"
+    fi
+}
 
 # ── Temp file cleanup ─────────────────────────────────────────────────────────
 STATS_DIR=""
@@ -176,6 +185,8 @@ trap cleanup EXIT INT TERM
 PARALLEL_JOBS=1
 PROGRESS_FILE=""   # path to resume progress file; empty = no tracking
 OPT_ROOT=""        # directory being optimized; progress entries are relative to it
+KEEP_PNG=0         # --keep-png: never convert PNG to JPEG
+OPTIMIZE_PNG=0     # --optimize-png: recompress PNGs that stay PNG losslessly
 RESUME=0           # 1 when --resume was passed
 wait_for_slot() {
     while (( $(jobs -rp | wc -l) >= PARALLEL_JOBS )); do
@@ -277,23 +288,40 @@ mark_done() {
 
 # ── Per-file processors ───────────────────────────────────────────────────────
 
-# Optimizes JPEG/WEBP in place and converts PNG to JPEG; keeps the result only if smaller.
+# True when the image has transparent pixels; a PNG with only opaque alpha is opaque.
+has_transparency() {
+    [[ "$(run_identify -format '%[opaque]' "$1" 2>/dev/null)" == False ]]
+}
+
+# Optimizes JPEG/WEBP in place and converts opaque PNG to JPEG; keeps the result only
+# if smaller. PNGs with transparency (or all PNGs with --keep-png) stay PNG and are only
+# recompressed losslessly with --optimize-png.
 # Writes "photo|rel|bytes_before|bytes_after[|fail]" to $stats_file.
 optimize_photo() {
     local file="$1" rel="$2" stats_file="$3"
     local ext="${file##*.}" new_ext=""
     ext="${ext,,}"
-    if [[ "$ext" == png ]]; then
-        new_ext=jpg
-    fi
 
     local tmp sz_before sz_after out
-    set_tmp_path tmp "$file" "${new_ext:-$ext}"
+    local -a ops=(-auto-orient +profile "!exif,*" -resize "${IMG_MAX_DIM}x${IMG_MAX_DIM}>" -quality "$JPEG_QUALITY")
     sz_before=$(stat -c%s -- "$file")
 
-    if ! run_convert "$file" -auto-orient +profile "!exif,*" \
-        -resize "${IMG_MAX_DIM}x${IMG_MAX_DIM}>" \
-        -quality "$JPEG_QUALITY" "$tmp" 2>/dev/null; then
+    if [[ "$ext" == png ]]; then
+        if ((KEEP_PNG)) || has_transparency "$file"; then
+            if ((!OPTIMIZE_PNG)); then
+                printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
+                mark_done "$rel"
+                return
+            fi
+            # Lossless: maximum zlib effort, no resize, metadata kept
+            ops=(-quality 95 -define png:compression-level=9 -define "png:exclude-chunks=date,time")
+        else
+            new_ext=jpg
+        fi
+    fi
+    set_tmp_path tmp "$file" "${new_ext:-$ext}"
+
+    if ! run_convert "$file" "${ops[@]}" "$tmp" 2>/dev/null; then
         rm -f -- "$tmp"
         printf 'photo|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
         return
@@ -716,6 +744,8 @@ optimize_main() {
             --copy-dupes=*)      copy_dupes_dir="${1#--copy-dupes=}"; shift ;;
             --delete-dupes)      delete_dupes=1; shift ;;
             -y|--yes)            assume_yes; shift ;;
+            --keep-png)          KEEP_PNG=1; shift ;;
+            --optimize-png)      OPTIMIZE_PNG=1; shift ;;
             --level)             [[ $# -ge 2 ]] || fail "--level requires a value"; level="$2"; shift 2 ;;
             --level=*)           level="${1#--level=}"; shift ;;
             --only-exts)         [[ $# -ge 2 ]] || fail "--only-exts requires a value"; FILTER_EXTS="$2"; shift 2 ;;
