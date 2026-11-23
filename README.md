@@ -1,6 +1,6 @@
 # media-optimize-tools
 
-[![CI](https://github.com/okarabudka/media-optimize-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/okarabudka/media-optimize-tools/actions/workflows/ci.yml)
+[![CI](https://github.com/okarabudka/media_optimize_tools/actions/workflows/ci.yml/badge.svg)](https://github.com/okarabudka/media_optimize_tools/actions/workflows/ci.yml)
 
 `mot` is a small Bash CLI that shrinks photo and video archives without risking the originals: it copies the archive
 with rsync and recompresses only the copy. It also reports where the space goes and finds duplicate files. Runs from a
