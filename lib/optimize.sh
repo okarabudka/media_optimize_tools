@@ -1,19 +1,10 @@
-#!/usr/bin/env bash
-
-# media_optimize.sh — copy a media archive and optimize the copy
+# shellcheck shell=bash
+# mot optimize: copy a media archive and optimize the copy. Sourced by bin/mot.
 #
-# Originals are NEVER modified. The script:
-#   1. Copies SOURCE_DIR → DESTINATION_DIR with rsync
+# Originals are never modified. The command:
+#   1. Copies SOURCE_DIR to DESTINATION_DIR with rsync
 #   2. Optimizes the copy based on the chosen level
 #   3. Prints a savings report with top files
-#
-# Supported formats:
-#   MOV / VOB  → MP4 H.264 + AAC (always — plays everywhere)
-#   JPEG/WEBP  → recompressed (strip EXIF, slightly lower quality)
-#   PNG        → lossless recompression (strip EXIF)
-#   MP4/MKV/AVI/etc → re-encoded at levels aggressive and maximum
-
-set -euo pipefail
 
 # ── Level presets ────────────────────────────────────────────────────────────
 # archive: convert formats only, near-lossless quality
@@ -41,9 +32,9 @@ readonly MAX_VIDEO_MAX_W=1280  MAX_VIDEO_MAX_H=720    MAX_AUDIO_BITRATE="128k"
 readonly MAX_REENCODE_ALL_VIDEO=1
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-usage() {
+optimize_usage() {
     cat <<'EOF'
-Usage: media_optimize.sh [OPTIONS] SOURCE_DIR [DESTINATION_DIR]
+Usage: mot optimize [OPTIONS] SOURCE_DIR [DESTINATION_DIR]
 
 Creates an optimized copy of SOURCE_DIR. Originals are never modified.
 Default destination: SOURCE_DIR_<level>  (e.g. Photos_aggressive)
@@ -95,49 +86,17 @@ Quality overrides (applied on top of --level, for fine-tuning):
   --min-video-mb N     Skip videos/MOV/VOB already smaller than N MB
 
 Examples:
-  media_optimize.sh /media/usb/Photos
-  media_optimize.sh --level aggressive /media/usb/Photos /media/usb/Photos_opt
-  media_optimize.sh --dry-run --level aggressive /media/usb/Photos
-  media_optimize.sh --only-exts mov,jpg,jpeg /media/usb/Photos
-  media_optimize.sh --skip-exts mp4,mkv /media/usb/Photos
-  media_optimize.sh --log ~/opt.log --jobs 4 /media/usb/Photos
-  media_optimize.sh --skip-copy --level aggressive /media/usb/Photos_aggressive
-  media_optimize.sh --resume --level aggressive /media/usb/Photos_aggressive
-  media_optimize.sh --copy-dupes /tmp/dupes_review /media/usb/Photos
-  media_optimize.sh --delete-dupes /media/usb/Photos
+  mot optimize /media/usb/Photos
+  mot optimize --level aggressive /media/usb/Photos /media/usb/Photos_opt
+  mot optimize --dry-run --level aggressive /media/usb/Photos
+  mot optimize --only-exts mov,jpg,jpeg /media/usb/Photos
+  mot optimize --skip-exts mp4,mkv /media/usb/Photos
+  mot optimize --log ~/opt.log --jobs 4 /media/usb/Photos
+  mot optimize --skip-copy --level aggressive /media/usb/Photos_aggressive
+  mot optimize --resume --level aggressive /media/usb/Photos_aggressive
+  mot optimize --copy-dupes /tmp/dupes_review /media/usb/Photos
+  mot optimize --delete-dupes /media/usb/Photos
 EOF
-}
-
-fail()            { echo "Error: $*" >&2; exit 1; }
-require_command() { command -v "$1" >/dev/null 2>&1 || fail "'$1' is required but not found in PATH."; }
-abs_path()        { realpath -m "$1"; }
-
-# Pure-awk formatting — no Python subprocess per call
-format_bytes() {
-    awk -v v="$1" 'BEGIN{
-        s = (v < 0) ? "-" : ""; v = (v < 0) ? -v : v
-        u = "B"
-        if (v >= 1024) { v /= 1024; u = "KB" }
-        if (v >= 1024) { v /= 1024; u = "MB" }
-        if (v >= 1024) { v /= 1024; u = "GB" }
-        if (v >= 1024) { v /= 1024; u = "TB" }
-        if (u == "B") printf "%s%d %s\n", s, v, u
-        else          printf "%s%.1f %s\n", s, v, u
-    }'
-}
-
-format_percent() {
-    local before="$1" after="$2"
-    (( before == 0 )) && { echo "n/a"; return; }
-    awk -v b="$before" -v a="$after" 'BEGIN{ printf "%+.1f%%\n", (b-a)/b*100 }'
-}
-
-format_elapsed() {
-    local s="$1"
-    local h=$(( s/3600 )) m=$(( (s%3600)/60 )) sec=$(( s%60 ))
-    (( h > 0 )) && { printf '%dh %dm %ds' "$h" "$m" "$sec"; return; }
-    (( m > 0 )) && { printf '%dm %ds' "$m" "$sec"; return; }
-    printf '%ds' "$sec"
 }
 
 check_free_space() {
@@ -179,7 +138,9 @@ ext_allowed() {
         for e in $SKIP_EXTS; do [[ "${e,,}" == "$ext" ]] && return 1; done
         return 0
     fi
-    [[ -z "$FILTER_EXTS" ]] && return 0
+    if [[ -z "$FILTER_EXTS" ]]; then
+        return 0
+    fi
     for e in $FILTER_EXTS; do [[ "${e,,}" == "$ext" ]] && return 0; done
     return 1
 }
@@ -203,7 +164,9 @@ STATS_DIR=""
 cleanup() {
     # Kill any still-running background jobs before exiting
     jobs -rp 2>/dev/null | xargs -r kill 2>/dev/null || true
-    [[ -n "$STATS_DIR" ]] && rm -rf "$STATS_DIR"
+    if [[ -n "$STATS_DIR" ]]; then
+        rm -rf "$STATS_DIR"
+    fi
 }
 trap cleanup EXIT INT TERM
 
@@ -237,13 +200,19 @@ collect_media_files() {
         ext_allowed "$_ext" || continue
         case "$_ext" in
             jpg|jpeg|png|webp)
-                (( MIN_PHOTO_BYTES > 0 && _sz < MIN_PHOTO_BYTES )) && continue
+                if (( MIN_PHOTO_BYTES > 0 && _sz < MIN_PHOTO_BYTES )); then
+                    continue
+                fi
                 img_files+=("$_path"); img_sizes+=("$_sz") ;;
             mov|vob)
-                (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )) && continue
+                if (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )); then
+                    continue
+                fi
                 video_primary+=("$_path"); video_primary_sizes+=("$_sz") ;;
             mp4|mkv|avi|m4v|webm|mpg|mpeg)
-                (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )) && continue
+                if (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )); then
+                    continue
+                fi
                 if (( REENCODE_ALL_VIDEO )); then
                     video_other+=("$_path"); video_other_sizes+=("$_sz")
                 elif (( with_skipped )); then
@@ -281,16 +250,25 @@ optimize_photo() {
         sz_after=$(stat -c%s -- "$tmp" 2>/dev/null || echo 0)
         if (( sz_after > 0 && sz_after < sz_before )); then
             mv "$tmp" "$dst"
-            [[ "$file" != "$dst" ]] && rm -f "$file"
+            if [[ "$file" != "$dst" ]]; then
+                rm -f "$file"
+            fi
             printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" > "$stats_file"
-            local _pout; [[ "$ext" == png ]] && _pout="${rel%.*}.jpg" || _pout="$rel"
-            [[ -n "$PROGRESS_FILE" ]] && printf '%s\n' "$_pout" >> "$PROGRESS_FILE"
+            local _pout="$rel"
+            if [[ "$ext" == png ]]; then
+                _pout="${rel%.*}.jpg"
+            fi
+            if [[ -n "$PROGRESS_FILE" ]]; then
+                printf '%s\n' "$_pout" >> "$PROGRESS_FILE"
+            fi
             return
         fi
     fi
     rm -f "$tmp"
     printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" > "$stats_file"
-    [[ -n "$PROGRESS_FILE" ]] && printf '%s\n' "$rel" >> "$PROGRESS_FILE"
+    if [[ -n "$PROGRESS_FILE" ]]; then
+        printf '%s\n' "$rel" >> "$PROGRESS_FILE"
+    fi
 }
 
 # Convert video → MP4. Renames if source is not .mp4. Writes result to $stats_file.
@@ -308,12 +286,14 @@ convert_video() {
 
     # Suppress per-second stats when multiple videos run in parallel (output would interleave)
     local stats_flag="-stats"
-    (( PARALLEL_JOBS > 1 )) && stats_flag="-nostats"
+    if (( PARALLEL_JOBS > 1 )); then
+        stats_flag="-nostats"
+    fi
 
     local sz_before sz_after
     sz_before=$(stat -c%s -- "$file")
 
-    if ffmpeg -hide_banner -loglevel warning $stats_flag -y \
+    if ffmpeg -hide_banner -loglevel warning "$stats_flag" -y \
         -i "$file" -vf "$scale" \
         -c:v libx264 -preset "$VIDEO_PRESET" -crf "$VIDEO_CRF" \
         -level:v 5.2 -fps_mode vfr \
@@ -323,10 +303,17 @@ convert_video() {
         sz_after=$(stat -c%s -- "$tmp" 2>/dev/null || echo 0)
         if (( sz_after > 0 )); then
             mv "$tmp" "$dst"
-            [[ "$file" != "$dst" ]] && rm -f "$file"
+            if [[ "$file" != "$dst" ]]; then
+                rm -f "$file"
+            fi
             printf 'video|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" > "$stats_file"
-            local _vout; [[ "$ext" == mp4 ]] && _vout="$rel" || _vout="${rel%.*}.mp4"
-            [[ -n "$PROGRESS_FILE" ]] && printf '%s\n' "$_vout" >> "$PROGRESS_FILE"
+            local _vout="${rel%.*}.mp4"
+            if [[ "$ext" == mp4 ]]; then
+                _vout="$rel"
+            fi
+            if [[ -n "$PROGRESS_FILE" ]]; then
+                printf '%s\n' "$_vout" >> "$PROGRESS_FILE"
+            fi
             return
         fi
     fi
@@ -352,17 +339,25 @@ print_top_savings() {
     echo "Top $top files by bytes saved:"
     local printed=0
     while IFS='|' read -r type rel before after rest; do
-        [[ "${rest:-}" == "skip" || "${rest:-}" == "fail" ]] && continue
+        if [[ "${rest:-}" == "skip" || "${rest:-}" == "fail" ]]; then
+            continue
+        fi
         local saved=$(( before - after ))
-        (( saved <= 0 )) && continue
+        if (( saved <= 0 )); then
+            continue
+        fi
         (( ++printed ))
         printf '  #%-3d [%-5s] %s\n        %s → %s  saved %s (%s)\n' \
             "$printed" "$type" "$rel" \
             "$(format_bytes "$before")" "$(format_bytes "$after")" \
             "$(format_bytes "$saved")" "$(format_percent "$before" "$after")"
-        (( printed >= top )) && break
+        if (( printed >= top )); then
+            break
+        fi
     done < <(awk -F'|' '{saved=$3-$4; print saved"|"$0}' "$tmp_all" | sort -t'|' -k1,1nr | cut -d'|' -f2-)
-    (( printed == 0 )) && echo "  No files were reduced in size."
+    if (( printed == 0 )); then
+        echo "  No files were reduced in size."
+    fi
     rm -f "$tmp_all"
 }
 
@@ -393,17 +388,23 @@ print_summary() {
 
     echo
     echo "=== Optimization Summary ==="
-    (( photo_ok > 0 || photo_fail > 0 )) && printf '%-8s  %5d files  %12s → %12s  %s\n' \
-        "Photos" "$photo_ok" "$(format_bytes "$photo_before")" "$(format_bytes "$photo_after")" "$(format_percent "$photo_before" "$photo_after")"
-    (( video_ok > 0 || video_fail > 0 )) && printf '%-8s  %5d files  %12s → %12s  %s\n' \
-        "Videos" "$video_ok" "$(format_bytes "$video_before")" "$(format_bytes "$video_after")" "$(format_percent "$video_before" "$video_after")"
+    if (( photo_ok > 0 || photo_fail > 0 )); then
+        printf '%-8s  %5d files  %12s → %12s  %s\n' \
+            "Photos" "$photo_ok" "$(format_bytes "$photo_before")" "$(format_bytes "$photo_after")" "$(format_percent "$photo_before" "$photo_after")"
+    fi
+    if (( video_ok > 0 || video_fail > 0 )); then
+        printf '%-8s  %5d files  %12s → %12s  %s\n' \
+            "Videos" "$video_ok" "$(format_bytes "$video_before")" "$(format_bytes "$video_after")" "$(format_percent "$video_before" "$video_after")"
+    fi
     echo "──────────────────────────────────────────────────────────────────"
     printf '%-8s  %5d files  %12s → %12s  %s\n' \
         "Total" "$(( photo_ok+video_ok ))" \
         "$(format_bytes "$total_before")" "$(format_bytes "$total_after")" \
         "$(format_percent "$total_before" "$total_after")"
     printf 'Elapsed : %s\n' "$(format_elapsed "$elapsed")"
-    (( total_fail > 0 )) && printf 'Failed  : %d file(s) — originals preserved in copy\n' "$total_fail" >&2
+    if (( total_fail > 0 )); then
+        printf 'Failed  : %d file(s) — originals preserved in copy\n' "$total_fail" >&2
+    fi
 }
 
 # ── Main optimizer (runs on the copy) ─────────────────────────────────────────
@@ -423,7 +424,9 @@ run_optimization() {
     if (( RESUME )) && [[ -f "$PROGRESS_FILE" ]]; then
         local _line
         while IFS= read -r _line; do
-            [[ -n "$_line" ]] && _done_files["$_line"]=1
+            if [[ -n "$_line" ]]; then
+                _done_files["$_line"]=1
+            fi
         done < "$PROGRESS_FILE"
         printf 'Resuming: skipping %d already-processed files.\n' "${#_done_files[@]}"
         echo
@@ -439,9 +442,12 @@ run_optimization() {
         idx=0
         for file in "${img_files[@]}"; do
             (( ++idx ))
-            local rel="${file#$dest/}"
+            local rel="${file#"$dest"/}"
             local _pext="${file##*.}"; _pext="${_pext,,}"
-            local _rel_out; [[ "$_pext" == png ]] && _rel_out="${rel%.*}.jpg" || _rel_out="$rel"
+            local _rel_out="$rel"
+            if [[ "$_pext" == png ]]; then
+                _rel_out="${rel%.*}.jpg"
+            fi
             if [[ -n "${_done_files[$_rel_out]+x}" ]]; then
                 printf '[%d/%d] [SKIP] %s\n' "$idx" "${#img_files[@]}" "$rel"
                 continue
@@ -463,9 +469,12 @@ run_optimization() {
         idx=0
         for file in "${all_videos[@]}"; do
             (( ++idx ))
-            local rel="${file#$dest/}"
+            local rel="${file#"$dest"/}"
             local _vext="${file##*.}"; _vext="${_vext,,}"
-            local _rel_out; [[ "$_vext" == mp4 ]] && _rel_out="$rel" || _rel_out="${rel%.*}.mp4"
+            local _rel_out="${rel%.*}.mp4"
+            if [[ "$_vext" == mp4 ]]; then
+                _rel_out="$rel"
+            fi
             if [[ -n "${_done_files[$_rel_out]+x}" ]]; then
                 printf '[%d/%d] [SKIP] %s\n' "$idx" "${#all_videos[@]}" "$rel"
                 continue
@@ -479,6 +488,11 @@ run_optimization() {
         done
         wait; echo
     fi
+}
+
+# Size after removing ratio percent.
+estimate_size() {
+    awk -v s="$1" -v r="$2" 'BEGIN{ printf "%d\n", s * (1 - r / 100) }'
 }
 
 # ── Dry-run with estimated savings ────────────────────────────────────────────
@@ -512,26 +526,21 @@ run_dry_run() {
     for _s in "${video_other_sizes[@]+"${video_other_sizes[@]}"}";  do (( other_sz  += _s )); done
     for _s in "${skipped_vid_sizes[@]+"${skipped_vid_sizes[@]}"}";  do (( skipped_sz += _s )); done
 
-    # Compute all estimated sizes in one Python call
     local img_est vid_est other_est
-    read -r img_est vid_est other_est < <(python3 - \
-        "$img_sz" "$img_ratio" "$vid_sz" "$vid_ratio" "$other_sz" "$other_ratio" <<'PY'
-import sys
-a = sys.argv[1:]
-out = []
-for i in range(0, 6, 2):
-    total, ratio = int(a[i]), float(a[i+1])
-    out.append(str(int(total * (1 - ratio / 100))))
-print(' '.join(out))
-PY
-)
+    img_est=$(estimate_size "$img_sz" "$img_ratio")
+    vid_est=$(estimate_size "$vid_sz" "$vid_ratio")
+    other_est=$(estimate_size "$other_sz" "$other_ratio")
 
     local total_before=$(( img_sz + vid_sz + other_sz ))
     local total_after=$(( img_est + vid_est + other_est ))
 
     printf 'Level       : %s\n' "$LEVEL"
-    [[ -n "$FILTER_EXTS" ]] && printf 'Only exts   : %s\n' "$FILTER_EXTS"
-    [[ -n "$SKIP_EXTS"   ]] && printf 'Skip exts   : %s\n' "$SKIP_EXTS"
+    if [[ -n "$FILTER_EXTS" ]]; then
+        printf 'Only exts   : %s\n' "$FILTER_EXTS"
+    fi
+    if [[ -n "$SKIP_EXTS"   ]]; then
+        printf 'Skip exts   : %s\n' "$SKIP_EXTS"
+    fi
     echo
     printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
         "Photos" "${#img_files[@]}" \
@@ -562,70 +571,11 @@ PY
 }
 
 # ── Duplicate management ──────────────────────────────────────────────────────
-# Finds duplicate files by MD5 hash.
-# Writes to out_file:
-#   Line 1:  STATS\t<groups>\t<dup_count>\t<dup_bytes>
-#   Lines 2+: paths of redundant files (keep first alphabetically per group)
-collect_duplicates() {
-    local target="$1" out_file="$2"
-    printf 'Scanning for duplicates in %s ...\n' "$target"
-    python3 - "$target" >"$out_file" 2>/dev/null <<'PY'
-import sys, os, hashlib, collections
-
-def md5_file(path, buf=65536):
-    h = hashlib.md5()
-    try:
-        with open(path, 'rb') as f:
-            while True:
-                chunk = f.read(buf)
-                if not chunk: break
-                h.update(chunk)
-        return h.hexdigest()
-    except OSError:
-        return None
-
-target = sys.argv[1]
-by_size = collections.defaultdict(list)
-for root, dirs, files in os.walk(target):
-    dirs.sort(); files.sort()
-    for fname in files:
-        path = os.path.join(root, fname)
-        try:
-            by_size[os.path.getsize(path)].append(path)
-        except OSError:
-            pass
-
-by_hash = collections.defaultdict(list)
-for sz, paths in by_size.items():
-    if len(paths) < 2:
-        continue
-    for path in paths:
-        h = md5_file(path)
-        if h:
-            by_hash[h].append(path)
-
-groups = 0
-dup_files = []
-for h, paths in sorted(by_hash.items()):
-    if len(paths) < 2:
-        continue
-    groups += 1
-    for path in sorted(paths)[1:]:
-        dup_files.append(path)
-
-dup_bytes = sum(os.path.getsize(p) for p in dup_files if os.path.exists(p))
-print("STATS\t{}\t{}\t{}".format(groups, len(dup_files), dup_bytes))
-for p in dup_files:
-    print(p)
-PY
-}
-
 run_copy_dupes() {
     local target="$1" dest="$2"
-    require_command python3
-
     local tmp_dupes; tmp_dupes=$(mktemp)
-    collect_duplicates "$target" "$tmp_dupes"
+    printf 'Scanning for duplicates in %s ...\n' "$target"
+    find_duplicates "$target" "$tmp_dupes"
 
     local stats_line groups dup_count dup_bytes
     stats_line=$(head -1 "$tmp_dupes")
@@ -641,14 +591,18 @@ run_copy_dupes() {
         "$groups" "$dup_count" "$(format_bytes "$dup_bytes")"
     echo
 
-    [[ -e "$dest" ]] && fail "Destination '$dest' already exists. Remove it first."
+    if [[ -e "$dest" ]]; then
+        fail "Destination '$dest' already exists. Remove it first."
+    fi
     mkdir -p "$dest"
 
     local copied=0
     local target_abs; target_abs=$(abs_path "$target")
     while IFS= read -r path; do
-        [[ -z "$path" ]] && continue
-        local rel="${path#$target_abs/}"
+        if [[ -z "$path" ]]; then
+            continue
+        fi
+        local rel="${path#"$target_abs"/}"
         local dst_path="$dest/$rel"
         mkdir -p "$(dirname "$dst_path")"
         cp -p -- "$path" "$dst_path"
@@ -664,10 +618,9 @@ run_copy_dupes() {
 
 run_delete_dupes() {
     local target="$1"
-    require_command python3
-
     local tmp_dupes; tmp_dupes=$(mktemp)
-    collect_duplicates "$target" "$tmp_dupes"
+    printf 'Scanning for duplicates in %s ...\n' "$target"
+    find_duplicates "$target" "$tmp_dupes"
 
     local stats_line groups dup_count dup_bytes
     stats_line=$(head -1 "$tmp_dupes")
@@ -684,9 +637,11 @@ run_delete_dupes() {
     echo "Files to be deleted:"
     local target_abs; target_abs=$(abs_path "$target")
     while IFS= read -r path; do
-        [[ -z "$path" ]] && continue
+        if [[ -z "$path" ]]; then
+            continue
+        fi
         local sz; sz=$(stat -c%s -- "$path" 2>/dev/null || echo 0)
-        printf '  [del]  %s  (%s)\n' "${path#$target_abs/}" "$(format_bytes "$sz")"
+        printf '  [del]  %s  (%s)\n' "${path#"$target_abs"/}" "$(format_bytes "$sz")"
     done < <(tail -n +2 "$tmp_dupes")
 
     echo
@@ -700,7 +655,9 @@ run_delete_dupes() {
 
     local deleted=0
     while IFS= read -r path; do
-        [[ -z "$path" ]] && continue
+        if [[ -z "$path" ]]; then
+            continue
+        fi
         rm -f -- "$path"
         (( ++deleted ))
     done < <(tail -n +2 "$tmp_dupes")
@@ -711,7 +668,7 @@ run_delete_dupes() {
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
-main() {
+optimize_main() {
     local level="moderate"
     local dry_run=0
     local skip_copy=0
@@ -725,7 +682,7 @@ main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -h|--help)           usage; exit 0 ;;
+            -h|--help)           optimize_usage; exit 0 ;;
             --dry-run)           dry_run=1; shift ;;
             --skip-copy)         skip_copy=1; shift ;;
             --resume)            resume=1; shift ;;
@@ -766,7 +723,7 @@ main() {
         esac
     done
 
-    [[ ${#positional[@]} -ge 1 ]] || { usage; exit 1; }
+    [[ ${#positional[@]} -ge 1 ]] || { optimize_usage >&2; exit 1; }
 
     # ── Duplicate management mode (mutually exclusive with optimization) ────────
     if [[ -n "$copy_dupes_dir" || "$delete_dupes" -eq 1 ]]; then
@@ -791,13 +748,16 @@ main() {
         exit 0
     fi
 
-    [[ -n "$FILTER_EXTS" && -n "$SKIP_EXTS" ]] && fail "--only-exts and --skip-exts are mutually exclusive"
+    if [[ -n "$FILTER_EXTS" && -n "$SKIP_EXTS" ]]; then
+        fail "--only-exts and --skip-exts are mutually exclusive"
+    fi
     case "$level" in
         archive|moderate|aggressive|maximum) ;;
         *) fail "--level must be: archive, moderate, aggressive, or maximum" ;;
     esac
-    [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] && (( PARALLEL_JOBS >= 1 )) \
-        || fail "--jobs must be a positive integer"
+    if ! [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] || ((PARALLEL_JOBS < 1)); then
+        fail "--jobs must be a positive integer"
+    fi
 
     # Apply level preset
     LEVEL="$level"
@@ -825,13 +785,27 @@ main() {
     esac
 
     # Apply individual overrides
-    [[ -n "$ov_jpeg_quality" ]] && JPEG_QUALITY="$ov_jpeg_quality"
-    [[ -n "$ov_img_max_dim"  ]] && IMG_MAX_DIM="$ov_img_max_dim"
-    [[ -n "$ov_crf"          ]] && VIDEO_CRF="$ov_crf"
-    [[ -n "$ov_preset"       ]] && VIDEO_PRESET="$ov_preset"
-    [[ -n "$ov_max_w"        ]] && VIDEO_MAX_W="$ov_max_w"
-    [[ -n "$ov_max_h"        ]] && VIDEO_MAX_H="$ov_max_h"
-    [[ -n "$ov_audio"        ]] && AUDIO_BITRATE="$ov_audio"
+    if [[ -n "$ov_jpeg_quality" ]]; then
+        JPEG_QUALITY="$ov_jpeg_quality"
+    fi
+    if [[ -n "$ov_img_max_dim"  ]]; then
+        IMG_MAX_DIM="$ov_img_max_dim"
+    fi
+    if [[ -n "$ov_crf"          ]]; then
+        VIDEO_CRF="$ov_crf"
+    fi
+    if [[ -n "$ov_preset"       ]]; then
+        VIDEO_PRESET="$ov_preset"
+    fi
+    if [[ -n "$ov_max_w"        ]]; then
+        VIDEO_MAX_W="$ov_max_w"
+    fi
+    if [[ -n "$ov_max_h"        ]]; then
+        VIDEO_MAX_H="$ov_max_h"
+    fi
+    if [[ -n "$ov_audio"        ]]; then
+        AUDIO_BITRATE="$ov_audio"
+    fi
     if [[ -n "$ov_min_photo_mb" ]]; then
         [[ "$ov_min_photo_mb" =~ ^[0-9]+$ ]] || fail "--min-photo-mb must be an integer"
         MIN_PHOTO_BYTES=$(( ov_min_photo_mb * 1024 * 1024 ))
@@ -854,7 +828,9 @@ main() {
     esac
 
     # --resume implies --skip-copy
-    (( resume )) && skip_copy=1
+    if (( resume )); then
+        skip_copy=1
+    fi
     RESUME="$resume"
 
     local source_dir dest_dir
@@ -865,11 +841,11 @@ main() {
     else
         source_dir="${positional[0]}"
         dest_dir="${positional[1]:-}"
-        [[ -z "$dest_dir" ]] && dest_dir="${source_dir%/}_${level}"
+        if [[ -z "$dest_dir" ]]; then
+            dest_dir="${source_dir%/}_${level}"
+        fi
     fi
     [[ -d "$source_dir" ]] || fail "Source directory '$source_dir' does not exist"
-
-    require_command python3
 
     if [[ -n "$log_file" ]]; then
         exec > >(tee -a "$log_file") 2>&1
@@ -888,10 +864,18 @@ main() {
 
     if (( ! skip_copy )); then
         require_command rsync
-        [[ -e "$dest_abs"              ]] && fail "Destination '$dest_abs' already exists. Delete it or use --skip-copy."
-        [[ "$dest_abs" == "$src_abs"   ]] && fail "Destination must differ from source."
-        [[ "$dest_abs" == "$src_abs"/* ]] && fail "Destination may not be inside source."
-        [[ "$src_abs"  == "$dest_abs"/* ]] && fail "Source may not be inside destination."
+        if [[ -e "$dest_abs"              ]]; then
+            fail "Destination '$dest_abs' already exists. Delete it or use --skip-copy."
+        fi
+        if [[ "$dest_abs" == "$src_abs"   ]]; then
+            fail "Destination must differ from source."
+        fi
+        if [[ "$dest_abs" == "$src_abs"/* ]]; then
+            fail "Destination may not be inside source."
+        fi
+        if [[ "$src_abs"  == "$dest_abs"/* ]]; then
+            fail "Source may not be inside destination."
+        fi
     else
         [[ -d "$dest_abs" ]] || fail "--skip-copy: destination '$dest_abs' does not exist"
     fi
@@ -904,10 +888,18 @@ main() {
         printf 'Destination : %s\n' "$dest_abs"
     fi
     printf 'Level       : %s\n' "$level"
-    [[ -n "$FILTER_EXTS" ]] && printf 'Only exts   : %s\n' "$FILTER_EXTS"
-    [[ -n "$SKIP_EXTS"   ]] && printf 'Skip exts   : %s\n' "$SKIP_EXTS"
-    (( MIN_PHOTO_BYTES > 0 )) && printf 'Min photo   : %d MB (skip smaller)\n' "$(( MIN_PHOTO_BYTES / 1024 / 1024 ))"
-    (( MIN_VIDEO_BYTES > 0 )) && printf 'Min video   : %d MB (skip smaller)\n' "$(( MIN_VIDEO_BYTES / 1024 / 1024 ))"
+    if [[ -n "$FILTER_EXTS" ]]; then
+        printf 'Only exts   : %s\n' "$FILTER_EXTS"
+    fi
+    if [[ -n "$SKIP_EXTS"   ]]; then
+        printf 'Skip exts   : %s\n' "$SKIP_EXTS"
+    fi
+    if (( MIN_PHOTO_BYTES > 0 )); then
+        printf 'Min photo   : %d MB (skip smaller)\n' "$(( MIN_PHOTO_BYTES / 1024 / 1024 ))"
+    fi
+    if (( MIN_VIDEO_BYTES > 0 )); then
+        printf 'Min video   : %d MB (skip smaller)\n' "$(( MIN_VIDEO_BYTES / 1024 / 1024 ))"
+    fi
     printf 'Settings    : JPEG/PNG %d  max-dim %dpx  CRF %d  preset %s  %dx%d  audio %s\n' \
         "$JPEG_QUALITY" "$IMG_MAX_DIM" \
         "$VIDEO_CRF" "$VIDEO_PRESET" "$VIDEO_MAX_W" "$VIDEO_MAX_H" "$AUDIO_BITRATE"
@@ -945,36 +937,37 @@ main() {
     print_top_savings "$STATS_DIR"
 
     # Remove progress file — all files processed successfully
-    [[ -n "$PROGRESS_FILE" && -f "$PROGRESS_FILE" ]] && rm -f "$PROGRESS_FILE"
+    if [[ -n "$PROGRESS_FILE" && -f "$PROGRESS_FILE" ]]; then
+        rm -f "$PROGRESS_FILE"
+    fi
 
     echo
     echo "Done."
     echo "  Optimized copy : $dest_abs"
-    (( ! skip_copy )) && echo "  Original       : $src_abs  (untouched)"
+    if (( ! skip_copy )); then
+        echo "  Original       : $src_abs  (untouched)"
+    fi
 
     # Final folder statistics
-    local stats_script
-    stats_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../statistics/folder_stats.sh"
+    local stats_script="$MOT_LIB/../bin/mot"
     if [[ -x "$stats_script" ]]; then
         if (( ! skip_copy )); then
             echo
             echo "============================================"
             echo "Folder stats: original"
             echo "============================================"
-            "$stats_script" "$src_abs"
+            "$stats_script" stats "$src_abs"
             echo
             echo "============================================"
             echo "Folder stats: optimized copy"
             echo "============================================"
-            "$stats_script" "$dest_abs"
+            "$stats_script" stats "$dest_abs"
         else
             echo
             echo "============================================"
             echo "Folder stats"
             echo "============================================"
-            "$stats_script" "$dest_abs"
+            "$stats_script" stats "$dest_abs"
         fi
     fi
 }
-
-main "$@"

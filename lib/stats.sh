@@ -1,15 +1,14 @@
-#!/usr/bin/env bash
-
-set -euo pipefail
+# shellcheck shell=bash
+# mot stats: read-only disk usage report. Sourced by bin/mot.
 
 DEFAULT_DEPTH="${FOLDER_STATS_DEPTH:-2}"
 DEFAULT_TOP_FILES="${FOLDER_STATS_TOP_FILES:-50}"
 DEFAULT_PHOTO_MB="${FOLDER_STATS_PHOTO_MB:-4}"
 DEFAULT_VIDEO_MB="${FOLDER_STATS_VIDEO_MB:-80}"
 
-usage() {
+stats_usage() {
     cat <<'EOF'
-Usage: folder_stats.sh [OPTIONS] TARGET_DIR
+Usage: mot stats [OPTIONS] TARGET_DIR
 
 Prints a quick summary of disk usage per subdirectory, lists the largest files,
 and shows files that would benefit most from aggressive-level optimization.
@@ -24,29 +23,6 @@ Options:
   --log FILE          Append all output to FILE in addition to the terminal
   -h, --help          Show this help
 EOF
-}
-
-fail() {
-    echo "Error: $*" >&2
-    exit 1
-}
-
-require_command() {
-    command -v "$1" >/dev/null 2>&1 || fail "'$1' is required but was not found in PATH"
-}
-
-format_elapsed() {
-    local secs="$1"
-    local h=$(( secs / 3600 ))
-    local m=$(( (secs % 3600) / 60 ))
-    local s=$(( secs % 60 ))
-    if (( h > 0 )); then
-        printf '%dh %dm %ds' "$h" "$m" "$s"
-    elif (( m > 0 )); then
-        printf '%dm %ds' "$m" "$s"
-    else
-        printf '%ds' "$s"
-    fi
 }
 
 print_directory_usage() {
@@ -104,9 +80,15 @@ print_problematic_files() {
         return
     fi
 
-    (( photo_count > 0 )) && printf '  Large photos : %d files  %.1f MB\n' "$photo_count" "$(awk -v s="$photo_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
-    (( mov_count   > 0 )) && printf '  MOV files    : %d files  %.1f MB\n' "$mov_count"   "$(awk -v s="$mov_total"   'BEGIN{printf "%.1f", s/1024/1024}')"
-    (( video_count > 0 )) && printf '  Large videos : %d files  %.1f MB\n' "$video_count" "$(awk -v s="$video_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
+    if (( photo_count > 0 )); then
+        printf '  Large photos : %d files  %.1f MB\n' "$photo_count" "$(awk -v s="$photo_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
+    fi
+    if (( mov_count   > 0 )); then
+        printf '  MOV files    : %d files  %.1f MB\n' "$mov_count"   "$(awk -v s="$mov_total"   'BEGIN{printf "%.1f", s/1024/1024}')"
+    fi
+    if (( video_count > 0 )); then
+        printf '  Large videos : %d files  %.1f MB\n' "$video_count" "$(awk -v s="$video_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
+    fi
     printf '  Total        : %d files  %.1f MB\n' "$total_count" "$(awk -v s="$total_bytes" 'BEGIN{printf "%.1f", s/1024/1024}')"
 }
 
@@ -115,59 +97,9 @@ print_duplicate_stats() {
     echo
     echo "Duplicate files (by content hash):"
 
-    require_command python3
     local tmp_dupes
     tmp_dupes=$(mktemp)
-
-    python3 - "$target" >"$tmp_dupes" 2>/dev/null <<'PY'
-import sys, os, hashlib, collections
-
-def md5_file(path, buf=65536):
-    h = hashlib.md5()
-    try:
-        with open(path, 'rb') as f:
-            while True:
-                chunk = f.read(buf)
-                if not chunk: break
-                h.update(chunk)
-        return h.hexdigest()
-    except OSError:
-        return None
-
-target = sys.argv[1]
-by_size = collections.defaultdict(list)
-for root, dirs, files in os.walk(target):
-    dirs.sort(); files.sort()
-    for fname in files:
-        path = os.path.join(root, fname)
-        try:
-            by_size[os.path.getsize(path)].append(path)
-        except OSError:
-            pass
-
-by_hash = collections.defaultdict(list)
-for sz, paths in by_size.items():
-    if len(paths) < 2:
-        continue
-    for path in paths:
-        h = md5_file(path)
-        if h:
-            by_hash[h].append(path)
-
-groups = 0
-dup_files = []
-for h, paths in sorted(by_hash.items()):
-    if len(paths) < 2:
-        continue
-    groups += 1
-    for path in sorted(paths)[1:]:
-        dup_files.append(path)
-
-dup_bytes = sum(os.path.getsize(p) for p in dup_files if os.path.exists(p))
-print("STATS\t{}\t{}\t{}".format(groups, len(dup_files), dup_bytes))
-for p in dup_files:
-    print(p)
-PY
+    find_duplicates "$target" "$tmp_dupes"
 
     if [[ ! -s "$tmp_dupes" ]]; then
         rm -f "$tmp_dupes"
@@ -186,20 +118,13 @@ PY
     fi
 
     tail -n +2 "$tmp_dupes" | while IFS= read -r path; do
-        local sz; sz=$(stat -c%s -- "$path" 2>/dev/null || echo 0)
         printf '  [dup]  %s\n' "$path"
     done
 
     echo
     printf '  Duplicate groups : %d\n' "$groups"
     printf '  Redundant files  : %d\n' "$dup_count"
-    printf '  Wasted space     : %s\n' \
-        "$(awk -v s="$dup_bytes" 'BEGIN{
-            if (s>=1073741824) printf "%.1f GB", s/1073741824
-            else if (s>=1048576) printf "%.1f MB", s/1048576
-            else if (s>=1024) printf "%.1f KB", s/1024
-            else printf "%d B", s
-        }')"
+    printf '  Wasted space     : %s\n' "$(format_bytes "$dup_bytes")"
 
     rm -f "$tmp_dupes"
 }
@@ -261,7 +186,7 @@ print_largest_files() {
         }'
 }
 
-main() {
+stats_main() {
     local depth="$DEFAULT_DEPTH"
     local top_files="$DEFAULT_TOP_FILES"
     local photo_mb="$DEFAULT_PHOTO_MB"
@@ -274,7 +199,7 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help)
-                usage; exit 0 ;;
+                stats_usage; exit 0 ;;
             --dupes)
                 show_dupes=1; shift ;;
             --subdirs)
@@ -312,7 +237,7 @@ main() {
         esac
     done
 
-    [[ -n "$target_dir" ]] || { usage; exit 1; }
+    [[ -n "$target_dir" ]] || { stats_usage >&2; exit 1; }
     [[ -d "$target_dir" ]] || fail "Directory '$target_dir' does not exist"
     [[ "$depth"     =~ ^[0-9]+$ ]] || fail "--depth must be an integer"
     [[ "$top_files" =~ ^[0-9]+$ ]] || fail "--top-files must be an integer"
@@ -334,11 +259,13 @@ main() {
     print_directory_usage "$target_dir" "$depth"
     print_largest_files "$target_dir" "$top_files" "$photo_mb" "$video_mb"
     print_problematic_files "$target_dir" "$photo_mb" "$video_mb"
-    (( show_dupes ))   && print_duplicate_stats "$target_dir"
-    (( show_subdirs )) && print_subdirs_summary "$target_dir"
+    if (( show_dupes )); then
+        print_duplicate_stats "$target_dir"
+    fi
+    if (( show_subdirs )); then
+        print_subdirs_summary "$target_dir"
+    fi
 
     echo
     printf 'Elapsed: %s\n' "$(format_elapsed "$(( SECONDS - START_TIME ))")"
 }
-
-main "$@"

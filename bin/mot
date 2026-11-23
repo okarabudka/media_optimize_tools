@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# mot — media optimize tools. Entry point for all subcommands.
+
+set -Eeuo pipefail
+
+readonly MOT_VERSION="1.0.0"
+MOT_LIB="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib" && pwd)"
+readonly MOT_LIB
+
+# shellcheck source=lib/common.sh
+source "$MOT_LIB/common.sh"
+
+usage() {
+    cat <<'EOF'
+Usage: mot <command> [options] [arguments]
+
+Commands:
+  optimize  SOURCE_DIR [DEST_DIR]   Copy a media archive and optimize the copy
+  stats     TARGET_DIR              Show disk usage, largest files and duplicates
+
+Options:
+  -h, --help       Show this help
+  -V, --version    Show the version
+
+Run 'mot <command> --help' for the options of a command.
+
+Examples:
+  mot stats /media/usb/Photos
+  mot optimize --dry-run --level aggressive /media/usb/Photos
+  mot optimize --level aggressive /media/usb/Photos /media/usb/Photos_opt
+EOF
+}
+
+main() {
+    if (($# == 0)); then
+        usage >&2
+        exit 1
+    fi
+
+    local command="$1"
+    shift
+    case "$command" in
+        -h | --help | help)
+            usage
+            ;;
+        -V | --version)
+            echo "mot $MOT_VERSION"
+            ;;
+        optimize)
+            # shellcheck source=lib/optimize.sh
+            source "$MOT_LIB/optimize.sh"
+            optimize_main "$@"
+            ;;
+        stats)
+            # shellcheck source=lib/stats.sh
+            source "$MOT_LIB/stats.sh"
+            stats_main "$@"
+            ;;
+        *)
+            fail "unknown command '$command'. Run 'mot --help' for the list of commands."
+            ;;
+    esac
+}
+
+main "$@"
