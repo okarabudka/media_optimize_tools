@@ -8,27 +8,27 @@
 
 # ── Level presets ────────────────────────────────────────────────────────────
 # archive: convert formats only, near-lossless quality
-readonly ARC_JPEG_QUALITY=95   ARC_IMG_MAX_DIM=99999
-readonly ARC_VIDEO_CRF=20      ARC_VIDEO_PRESET="slow"
-readonly ARC_VIDEO_MAX_W=3840  ARC_VIDEO_MAX_H=2160   ARC_AUDIO_BITRATE="256k"
+readonly ARC_JPEG_QUALITY=95 ARC_IMG_MAX_DIM=99999
+readonly ARC_VIDEO_CRF=20 ARC_VIDEO_PRESET="slow"
+readonly ARC_VIDEO_MAX_W=3840 ARC_VIDEO_MAX_H=2160 ARC_AUDIO_BITRATE="256k"
 readonly ARC_REENCODE_ALL_VIDEO=0
 
 # moderate: safe everyday optimization, loss barely noticeable
-readonly MOD_JPEG_QUALITY=88   MOD_IMG_MAX_DIM=8000
-readonly MOD_VIDEO_CRF=25      MOD_VIDEO_PRESET="medium"
-readonly MOD_VIDEO_MAX_W=3840  MOD_VIDEO_MAX_H=2160   MOD_AUDIO_BITRATE="192k"
+readonly MOD_JPEG_QUALITY=88 MOD_IMG_MAX_DIM=8000
+readonly MOD_VIDEO_CRF=25 MOD_VIDEO_PRESET="medium"
+readonly MOD_VIDEO_MAX_W=3840 MOD_VIDEO_MAX_H=2160 MOD_AUDIO_BITRATE="192k"
 readonly MOD_REENCODE_ALL_VIDEO=1
 
 # aggressive: visible savings, quality still acceptable
-readonly AGG_JPEG_QUALITY=80   AGG_IMG_MAX_DIM=3840
-readonly AGG_VIDEO_CRF=28      AGG_VIDEO_PRESET="medium"
-readonly AGG_VIDEO_MAX_W=1920  AGG_VIDEO_MAX_H=1080   AGG_AUDIO_BITRATE="192k"
+readonly AGG_JPEG_QUALITY=80 AGG_IMG_MAX_DIM=3840
+readonly AGG_VIDEO_CRF=28 AGG_VIDEO_PRESET="medium"
+readonly AGG_VIDEO_MAX_W=1920 AGG_VIDEO_MAX_H=1080 AGG_AUDIO_BITRATE="192k"
 readonly AGG_REENCODE_ALL_VIDEO=1
 
 # maximum: max space savings, noticeable quality loss
-readonly MAX_JPEG_QUALITY=70   MAX_IMG_MAX_DIM=2560
-readonly MAX_VIDEO_CRF=32      MAX_VIDEO_PRESET="medium"
-readonly MAX_VIDEO_MAX_W=1280  MAX_VIDEO_MAX_H=720    MAX_AUDIO_BITRATE="128k"
+readonly MAX_JPEG_QUALITY=70 MAX_IMG_MAX_DIM=2560
+readonly MAX_VIDEO_CRF=32 MAX_VIDEO_PRESET="medium"
+readonly MAX_VIDEO_MAX_W=1280 MAX_VIDEO_MAX_H=720 MAX_AUDIO_BITRATE="128k"
 readonly MAX_REENCODE_ALL_VIDEO=1
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,16 +113,16 @@ check_free_space() {
     # Estimate output size based on level (conservative but realistic)
     local ratio
     case "$level" in
-        archive)    ratio=100 ;;
-        moderate)   ratio=85  ;;
-        aggressive) ratio=60  ;;
-        maximum)    ratio=45  ;;
-        *)          ratio=85  ;;
+        archive) ratio=100 ;;
+        moderate) ratio=85 ;;
+        aggressive) ratio=60 ;;
+        maximum) ratio=45 ;;
+        *) ratio=85 ;;
     esac
     local est_bytes
     est_bytes=$(awk -v s="$src_bytes" -v r="$ratio" 'BEGIN{ printf "%d\n", s*r/100 }')
 
-    if (( est_bytes > free_bytes )); then
+    if ((est_bytes > free_bytes)); then
         echo "WARNING: Estimated output ~$(format_bytes "$est_bytes") but only $(format_bytes "$free_bytes") free on destination." >&2
         if ! confirm "Continue anyway?"; then
             echo "Aborted." >&2
@@ -132,10 +132,10 @@ check_free_space() {
 }
 
 # ── Extension filter ──────────────────────────────────────────────────────────
-FILTER_EXTS=""   # --only-exts: empty = allow all
-SKIP_EXTS=""     # --skip-exts: empty = skip nothing
-MIN_PHOTO_BYTES=0  # --min-photo-mb: skip photos smaller than this (0 = process all)
-MIN_VIDEO_BYTES=0  # --min-video-mb: skip videos smaller than this (0 = process all)
+FILTER_EXTS=""    # --only-exts: empty = allow all
+SKIP_EXTS=""      # --skip-exts: empty = skip nothing
+MIN_PHOTO_BYTES=0 # --min-photo-mb: skip photos smaller than this (0 = process all)
+MIN_VIDEO_BYTES=0 # --min-video-mb: skip videos smaller than this (0 = process all)
 
 ext_allowed() {
     local ext="${1,,}"
@@ -197,14 +197,14 @@ trap cleanup EXIT INT TERM
 
 # ── Parallel pool ─────────────────────────────────────────────────────────────
 PARALLEL_JOBS=1
-PROGRESS_FILE=""   # path to resume progress file; empty = no tracking
-OPT_ROOT=""        # directory being optimized; progress entries are relative to it
-KEEP_PNG=0         # --keep-png: never convert PNG to JPEG
-HEIC_TO_JPEG=0     # --heic-to-jpeg: convert HEIC/HEIF photos to JPEG
-OPTIMIZE_PNG=0     # --optimize-png: recompress PNGs that stay PNG losslessly
-RESUME=0           # 1 when --resume was passed
+PROGRESS_FILE="" # path to resume progress file; empty = no tracking
+OPT_ROOT=""      # directory being optimized; progress entries are relative to it
+KEEP_PNG=0       # --keep-png: never convert PNG to JPEG
+HEIC_TO_JPEG=0   # --heic-to-jpeg: convert HEIC/HEIF photos to JPEG
+OPTIMIZE_PNG=0   # --optimize-png: recompress PNGs that stay PNG losslessly
+RESUME=0         # 1 when --resume was passed
 wait_for_slot() {
-    while (( $(jobs -rp | wc -l) >= PARALLEL_JOBS )); do
+    while (($(jobs -rp | wc -l) >= PARALLEL_JOBS)); do
         wait -n 2>/dev/null || sleep 0.05
     done
 }
@@ -225,32 +225,41 @@ collect_media_files() {
     printf 'Scanning %s ...\n' "$dir"
 
     while IFS= read -r -d '' _sz && IFS= read -r -d '' _path; do
-        _ext="${_path##*.}"; _ext="${_ext,,}"
+        _ext="${_path##*.}"
+        _ext="${_ext,,}"
         ext_allowed "$_ext" || continue
         case "$_ext" in
-            jpg|jpeg|png|webp)
-                if (( MIN_PHOTO_BYTES > 0 && _sz < MIN_PHOTO_BYTES )); then
+            jpg | jpeg | png | webp)
+                if ((MIN_PHOTO_BYTES > 0 && _sz < MIN_PHOTO_BYTES)); then
                     continue
                 fi
-                img_files+=("$_path"); img_sizes+=("$_sz") ;;
-            heic|heif)
+                img_files+=("$_path")
+                img_sizes+=("$_sz")
+                ;;
+            heic | heif)
                 if ((!HEIC_TO_JPEG)) || ((MIN_PHOTO_BYTES > 0 && _sz < MIN_PHOTO_BYTES)); then
                     continue
                 fi
-                heic_files+=("$_path"); heic_sizes+=("$_sz") ;;
-            mov|vob)
-                if (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )); then
+                heic_files+=("$_path")
+                heic_sizes+=("$_sz")
+                ;;
+            mov | vob)
+                if ((MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES)); then
                     continue
                 fi
-                video_primary+=("$_path"); video_primary_sizes+=("$_sz") ;;
-            mp4|mkv|avi|m4v|webm|mpg|mpeg)
-                if (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )); then
+                video_primary+=("$_path")
+                video_primary_sizes+=("$_sz")
+                ;;
+            mp4 | mkv | avi | m4v | webm | mpg | mpeg)
+                if ((MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES)); then
                     continue
                 fi
-                if (( REENCODE_ALL_VIDEO )); then
-                    video_other+=("$_path"); video_other_sizes+=("$_sz")
-                elif (( with_skipped )); then
-                    skipped_vid+=("$_path"); skipped_vid_sizes+=("$_sz")
+                if ((REENCODE_ALL_VIDEO)); then
+                    video_other+=("$_path")
+                    video_other_sizes+=("$_sz")
+                elif ((with_skipped)); then
+                    skipped_vid+=("$_path")
+                    skipped_vid_sizes+=("$_sz")
                 fi
                 ;;
         esac
@@ -441,7 +450,7 @@ print_top_savings() {
     local tmp_all
     tmp_all=$(mktemp)
 
-    cat "$stats_dir"/*.result 2>/dev/null > "$tmp_all" || true
+    cat "$stats_dir"/*.result 2>/dev/null >"$tmp_all" || true
     if [[ ! -s "$tmp_all" ]]; then
         rm -f "$tmp_all"
         return
@@ -454,20 +463,20 @@ print_top_savings() {
         if [[ "${rest:-}" == "skip" || "${rest:-}" == "fail" ]]; then
             continue
         fi
-        local saved=$(( before - after ))
-        if (( saved <= 0 )); then
+        local saved=$((before - after))
+        if ((saved <= 0)); then
             continue
         fi
-        (( ++printed ))
+        ((++printed))
         printf '  #%-3d [%-5s] %s\n        %s → %s  saved %s (%s)\n' \
             "$printed" "$type" "$rel" \
             "$(format_bytes "$before")" "$(format_bytes "$after")" \
             "$(format_bytes "$saved")" "$(format_percent "$before" "$after")"
-        if (( printed >= top )); then
+        if ((printed >= top)); then
             break
         fi
     done < <(awk -F'|' '{saved=$3-$4; print saved"|"$0}' "$tmp_all" | sort -t'|' -k1,1nr | cut -d'|' -f2-)
-    if (( printed == 0 )); then
+    if ((printed == 0)); then
         echo "  No files were reduced in size."
     fi
     rm -f "$tmp_all"
@@ -483,38 +492,48 @@ print_summary() {
         case "$type" in
             photo)
                 case "${rest:-}" in
-                    fail) (( ++photo_fail )) ;;
-                    *) photo_before=$(( photo_before+before )); photo_after=$(( photo_after+after )); (( ++photo_ok )) ;;
-                esac ;;
+                    fail) ((++photo_fail)) ;;
+                    *)
+                        photo_before=$((photo_before + before))
+                        photo_after=$((photo_after + after))
+                        ((++photo_ok))
+                        ;;
+                esac
+                ;;
             video)
                 case "${rest:-}" in
-                    fail) (( ++video_fail )) ;;
-                    *) video_before=$(( video_before+before )); video_after=$(( video_after+after )); (( ++video_ok )) ;;
-                esac ;;
+                    fail) ((++video_fail)) ;;
+                    *)
+                        video_before=$((video_before + before))
+                        video_after=$((video_after + after))
+                        ((++video_ok))
+                        ;;
+                esac
+                ;;
         esac
     done < <(cat "$stats_dir"/*.result 2>/dev/null || true)
 
-    local total_before=$(( photo_before+video_before ))
-    local total_after=$(( photo_after+video_after ))
-    local total_fail=$(( photo_fail+video_fail ))
+    local total_before=$((photo_before + video_before))
+    local total_after=$((photo_after + video_after))
+    local total_fail=$((photo_fail + video_fail))
 
     echo
     echo "=== Optimization Summary ==="
-    if (( photo_ok > 0 || photo_fail > 0 )); then
+    if ((photo_ok > 0 || photo_fail > 0)); then
         printf '%-8s  %5d files  %12s → %12s  %s\n' \
             "Photos" "$photo_ok" "$(format_bytes "$photo_before")" "$(format_bytes "$photo_after")" "$(format_percent "$photo_before" "$photo_after")"
     fi
-    if (( video_ok > 0 || video_fail > 0 )); then
+    if ((video_ok > 0 || video_fail > 0)); then
         printf '%-8s  %5d files  %12s → %12s  %s\n' \
             "Videos" "$video_ok" "$(format_bytes "$video_before")" "$(format_bytes "$video_after")" "$(format_percent "$video_before" "$video_after")"
     fi
     echo "──────────────────────────────────────────────────────────────────"
     printf '%-8s  %5d files  %12s → %12s  %s\n' \
-        "Total" "$(( photo_ok+video_ok ))" \
+        "Total" "$((photo_ok + video_ok))" \
         "$(format_bytes "$total_before")" "$(format_bytes "$total_after")" \
         "$(format_percent "$total_before" "$total_after")"
     printf 'Elapsed : %s\n' "$(format_elapsed "$elapsed")"
-    if (( total_fail > 0 )); then
+    if ((total_fail > 0)); then
         printf 'Failed  : %d file(s) — originals preserved in copy\n' "$total_fail" >&2
     fi
 }
@@ -536,28 +555,28 @@ run_optimization() {
     # Set up progress tracking for resume support
     PROGRESS_FILE="$dest/.optimize_progress"
     declare -A _done_files=()
-    if (( RESUME )) && [[ -f "$PROGRESS_FILE" ]]; then
+    if ((RESUME)) && [[ -f "$PROGRESS_FILE" ]]; then
         local _line
         while IFS= read -r _line; do
             if [[ -n "$_line" ]]; then
                 _done_files["$_line"]=1
             fi
-        done < "$PROGRESS_FILE"
+        done <"$PROGRESS_FILE"
         printf 'Resuming: skipping %d already-processed files.\n' "${#_done_files[@]}"
         echo
     fi
 
     img_files+=("${heic_files[@]+"${heic_files[@]}"}")
     printf 'Found: %d photos, %d videos to process\n' \
-        "${#img_files[@]}" "$(( ${#video_primary[@]} + ${#video_other[@]} ))"
+        "${#img_files[@]}" "$((${#video_primary[@]} + ${#video_other[@]}))"
     echo
 
     # Photos
-    if (( ${#img_files[@]} > 0 )); then
+    if ((${#img_files[@]} > 0)); then
         printf -- '--- Photos  (quality=%d, max=%dpx) ---\n' "$JPEG_QUALITY" "$IMG_MAX_DIM"
         idx=0
         for file in "${img_files[@]}"; do
-            (( ++idx ))
+            ((++idx))
             local rel="${file#"$dest"/}"
             if [[ -n "${_done_files[$rel]+x}" ]]; then
                 printf '[%d/%d] [SKIP] %s\n' "$idx" "${#img_files[@]}" "$rel"
@@ -569,30 +588,33 @@ run_optimization() {
             local _f="$file" _r="$rel" _sf="$sf"
             { optimize_photo "$_f" "$_r" "$_sf"; } &
         done
-        wait; echo
+        wait
+        echo
     fi
 
     # Videos
     local -a all_videos=("${video_primary[@]+"${video_primary[@]}"}" "${video_other[@]+"${video_other[@]}"}")
-    if (( ${#all_videos[@]} > 0 )); then
+    if ((${#all_videos[@]} > 0)); then
         printf -- '--- Videos  (CRF=%d, preset=%s, max %dx%d, audio=%s) ---\n' \
             "$VIDEO_CRF" "$VIDEO_PRESET" "$VIDEO_MAX_W" "$VIDEO_MAX_H" "$AUDIO_BITRATE"
         idx=0
         for file in "${all_videos[@]}"; do
-            (( ++idx ))
+            ((++idx))
             local rel="${file#"$dest"/}"
             if [[ -n "${_done_files[$rel]+x}" ]]; then
                 printf '[%d/%d] [SKIP] %s\n' "$idx" "${#all_videos[@]}" "$rel"
                 continue
             fi
-            local sz; sz=$(stat -c%s -- "$file")
+            local sz
+            sz=$(stat -c%s -- "$file")
             printf '[%d/%d] %s  (%s)\n' "$idx" "${#all_videos[@]}" "$rel" "$(format_bytes "$sz")"
             local sf="$STATS_DIR/video_${idx}.result"
             wait_for_slot
             local _f="$file" _r="$rel" _sf="$sf"
             { convert_video "$_f" "$_r" "$_sf"; } &
         done
-        wait; echo
+        wait
+        echo
     fi
 }
 
@@ -618,19 +640,35 @@ run_dry_run() {
     # Estimated savings ratios (%) by level.
     local img_ratio vid_ratio other_ratio
     case "$LEVEL" in
-        archive)    img_ratio=-5;  vid_ratio=15; other_ratio=0  ;;
-        moderate)   img_ratio=12;  vid_ratio=30; other_ratio=0  ;;
-        aggressive) img_ratio=22;  vid_ratio=50; other_ratio=35 ;;
-        maximum)    img_ratio=35;  vid_ratio=65; other_ratio=55 ;;
+        archive)
+            img_ratio=-5
+            vid_ratio=15
+            other_ratio=0
+            ;;
+        moderate)
+            img_ratio=12
+            vid_ratio=30
+            other_ratio=0
+            ;;
+        aggressive)
+            img_ratio=22
+            vid_ratio=50
+            other_ratio=35
+            ;;
+        maximum)
+            img_ratio=35
+            vid_ratio=65
+            other_ratio=55
+            ;;
     esac
 
     # Sum sizes from arrays collected during scan — no stat calls needed
     local img_sz=0 vid_sz=0 other_sz=0 skipped_sz=0 heic_sz=0
     local _s
-    for _s in "${img_sizes[@]+"${img_sizes[@]}"}";            do (( img_sz     += _s )); done
-    for _s in "${video_primary_sizes[@]+"${video_primary_sizes[@]}"}"; do (( vid_sz += _s )); done
-    for _s in "${video_other_sizes[@]+"${video_other_sizes[@]}"}";  do (( other_sz  += _s )); done
-    for _s in "${skipped_vid_sizes[@]+"${skipped_vid_sizes[@]}"}";  do (( skipped_sz += _s )); done
+    for _s in "${img_sizes[@]+"${img_sizes[@]}"}"; do ((img_sz += _s)); done
+    for _s in "${video_primary_sizes[@]+"${video_primary_sizes[@]}"}"; do ((vid_sz += _s)); done
+    for _s in "${video_other_sizes[@]+"${video_other_sizes[@]}"}"; do ((other_sz += _s)); done
+    for _s in "${skipped_vid_sizes[@]+"${skipped_vid_sizes[@]}"}"; do ((skipped_sz += _s)); done
     for _s in "${heic_sizes[@]+"${heic_sizes[@]}"}"; do ((heic_sz += _s)); done
 
     local img_est vid_est other_est
@@ -648,7 +686,7 @@ run_dry_run() {
     if [[ -n "$FILTER_EXTS" ]]; then
         printf 'Only exts   : %s\n' "$FILTER_EXTS"
     fi
-    if [[ -n "$SKIP_EXTS"   ]]; then
+    if [[ -n "$SKIP_EXTS" ]]; then
         printf 'Skip exts   : %s\n' "$SKIP_EXTS"
     fi
     echo
@@ -666,7 +704,7 @@ run_dry_run() {
         "MOV/VOB→MP4" "${#video_primary[@]}" \
         "$(format_bytes "$vid_sz")" "$(format_bytes "$vid_est")" \
         "$(format_percent "$vid_sz" "$vid_est")"
-    if (( REENCODE_ALL_VIDEO && other_sz > 0 )); then
+    if ((REENCODE_ALL_VIDEO && other_sz > 0)); then
         printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
             "MP4/MKV" "${#video_other[@]}" \
             "$(format_bytes "$other_sz")" "$(format_bytes "$other_est")" \
@@ -678,7 +716,7 @@ run_dry_run() {
         "$(format_bytes "$total_before")" "$(format_bytes "$total_after")" \
         "$(format_percent "$total_before" "$total_after")"
 
-    if (( ${#skipped_vid[@]} > 0 )); then
+    if ((${#skipped_vid[@]} > 0)); then
         echo
         printf 'Skipped (not re-encoded at this level): %d MP4/MKV/AVI  ~%s\n' \
             "${#skipped_vid[@]}" "$(format_bytes "$skipped_sz")"
@@ -689,13 +727,14 @@ run_dry_run() {
 # ── Duplicate management ──────────────────────────────────────────────────────
 run_copy_dupes() {
     local target="$1" dest="$2"
-    local tmp_dupes; tmp_dupes=$(mktemp)
+    local tmp_dupes
+    tmp_dupes=$(mktemp)
     printf 'Scanning for duplicates in %s ...\n' "$target"
     find_duplicates "$target" "$tmp_dupes"
 
     local stats_line groups dup_count dup_bytes
     stats_line=$(head -1 "$tmp_dupes")
-    IFS=$'\t' read -r _ groups dup_count dup_bytes <<< "$stats_line"
+    IFS=$'\t' read -r _ groups dup_count dup_bytes <<<"$stats_line"
 
     if [[ -z "$groups" || "$groups" == "0" ]]; then
         rm -f "$tmp_dupes"
@@ -713,7 +752,8 @@ run_copy_dupes() {
     mkdir -p "$dest"
 
     local copied=0
-    local target_abs; target_abs=$(abs_path "$target")
+    local target_abs
+    target_abs=$(abs_path "$target")
     while IFS= read -r path; do
         if [[ -z "$path" ]]; then
             continue
@@ -723,7 +763,7 @@ run_copy_dupes() {
         mkdir -p "$(dirname "$dst_path")"
         cp -p -- "$path" "$dst_path"
         printf '  [copy]  %s\n' "$rel"
-        (( ++copied ))
+        ((++copied))
     done < <(tail -n +2 "$tmp_dupes")
 
     rm -f "$tmp_dupes"
@@ -734,13 +774,14 @@ run_copy_dupes() {
 
 run_delete_dupes() {
     local target="$1"
-    local tmp_dupes; tmp_dupes=$(mktemp)
+    local tmp_dupes
+    tmp_dupes=$(mktemp)
     printf 'Scanning for duplicates in %s ...\n' "$target"
     find_duplicates "$target" "$tmp_dupes"
 
     local stats_line groups dup_count dup_bytes
     stats_line=$(head -1 "$tmp_dupes")
-    IFS=$'\t' read -r _ groups dup_count dup_bytes <<< "$stats_line"
+    IFS=$'\t' read -r _ groups dup_count dup_bytes <<<"$stats_line"
 
     if [[ -z "$groups" || "$groups" == "0" ]]; then
         rm -f "$tmp_dupes"
@@ -751,12 +792,14 @@ run_delete_dupes() {
     printf 'Found: %d groups, %d redundant files (%s)\n' \
         "$groups" "$dup_count" "$(format_bytes "$dup_bytes")"
     echo "Files to be deleted:"
-    local target_abs; target_abs=$(abs_path "$target")
+    local target_abs
+    target_abs=$(abs_path "$target")
     while IFS= read -r path; do
         if [[ -z "$path" ]]; then
             continue
         fi
-        local sz; sz=$(stat -c%s -- "$path" 2>/dev/null || echo 0)
+        local sz
+        sz=$(stat -c%s -- "$path" 2>/dev/null || echo 0)
         printf '  [del]  %s  (%s)\n' "${path#"$target_abs"/}" "$(format_bytes "$sz")"
     done < <(tail -n +2 "$tmp_dupes")
 
@@ -773,7 +816,7 @@ run_delete_dupes() {
             continue
         fi
         rm -f -- "$path"
-        (( ++deleted ))
+        ((++deleted))
     done < <(tail -n +2 "$tmp_dupes")
 
     rm -f "$tmp_dupes"
@@ -796,56 +839,199 @@ optimize_main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -h|--help)           optimize_usage; exit 0 ;;
-            --dry-run)           dry_run=1; shift ;;
-            --skip-copy)         skip_copy=1; shift ;;
-            --resume)            resume=1; shift ;;
-            --copy-dupes)        [[ $# -ge 2 ]] || fail "--copy-dupes requires a directory"; copy_dupes_dir="$2"; shift 2 ;;
-            --copy-dupes=*)      copy_dupes_dir="${1#--copy-dupes=}"; shift ;;
-            --delete-dupes)      delete_dupes=1; shift ;;
-            -y|--yes)            assume_yes; shift ;;
-            --keep-png)          KEEP_PNG=1; shift ;;
-            --heic-to-jpeg)      HEIC_TO_JPEG=1; shift ;;
-            --optimize-png)      OPTIMIZE_PNG=1; shift ;;
-            --level)             [[ $# -ge 2 ]] || fail "--level requires a value"; level="$2"; shift 2 ;;
-            --level=*)           level="${1#--level=}"; shift ;;
-            --only-exts)         [[ $# -ge 2 ]] || fail "--only-exts requires a value"; FILTER_EXTS="$2"; shift 2 ;;
-            --only-exts=*)       FILTER_EXTS="${1#--only-exts=}"; shift ;;
-            --skip-exts)         [[ $# -ge 2 ]] || fail "--skip-exts requires a value"; SKIP_EXTS="$2"; shift 2 ;;
-            --skip-exts=*)       SKIP_EXTS="${1#--skip-exts=}"; shift ;;
-            --jobs)              [[ $# -ge 2 ]] || fail "--jobs requires a value"; PARALLEL_JOBS="$2"; shift 2 ;;
-            --jobs=*)            PARALLEL_JOBS="${1#--jobs=}"; shift ;;
-            --log)               [[ $# -ge 2 ]] || fail "--log requires a value"; log_file="$2"; shift 2 ;;
-            --log=*)             log_file="${1#--log=}"; shift ;;
-            --jpeg-quality)      [[ $# -ge 2 ]] || fail "--jpeg-quality requires a value"; ov_jpeg_quality="$2"; shift 2 ;;
-            --jpeg-quality=*)    ov_jpeg_quality="${1#--jpeg-quality=}"; shift ;;
-            --max-image-dim)     [[ $# -ge 2 ]] || fail "--max-image-dim requires a value"; ov_img_max_dim="$2"; shift 2 ;;
-            --max-image-dim=*)   ov_img_max_dim="${1#--max-image-dim=}"; shift ;;
-            --crf)               [[ $# -ge 2 ]] || fail "--crf requires a value"; ov_crf="$2"; shift 2 ;;
-            --crf=*)             ov_crf="${1#--crf=}"; shift ;;
-            --preset)            [[ $# -ge 2 ]] || fail "--preset requires a value"; ov_preset="$2"; shift 2 ;;
-            --preset=*)          ov_preset="${1#--preset=}"; shift ;;
-            --max-width)         [[ $# -ge 2 ]] || fail "--max-width requires a value"; ov_max_w="$2"; shift 2 ;;
-            --max-width=*)       ov_max_w="${1#--max-width=}"; shift ;;
-            --max-height)        [[ $# -ge 2 ]] || fail "--max-height requires a value"; ov_max_h="$2"; shift 2 ;;
-            --max-height=*)      ov_max_h="${1#--max-height=}"; shift ;;
-            --audio-bitrate)     [[ $# -ge 2 ]] || fail "--audio-bitrate requires a value"; ov_audio="$2"; shift 2 ;;
-            --audio-bitrate=*)   ov_audio="${1#--audio-bitrate=}"; shift ;;
-            --min-photo-mb)      [[ $# -ge 2 ]] || fail "--min-photo-mb requires a value"; ov_min_photo_mb="$2"; shift 2 ;;
-            --min-photo-mb=*)    ov_min_photo_mb="${1#--min-photo-mb=}"; shift ;;
-            --min-video-mb)      [[ $# -ge 2 ]] || fail "--min-video-mb requires a value"; ov_min_video_mb="$2"; shift 2 ;;
-            --min-video-mb=*)    ov_min_video_mb="${1#--min-video-mb=}"; shift ;;
-            --)                  shift; positional+=("$@"); break ;;
-            -*)                  fail "Unknown option: $1" ;;
-            *)                   positional+=("$1"); shift ;;
+            -h | --help)
+                optimize_usage
+                exit 0
+                ;;
+            --dry-run)
+                dry_run=1
+                shift
+                ;;
+            --skip-copy)
+                skip_copy=1
+                shift
+                ;;
+            --resume)
+                resume=1
+                shift
+                ;;
+            --copy-dupes)
+                [[ $# -ge 2 ]] || fail "--copy-dupes requires a directory"
+                copy_dupes_dir="$2"
+                shift 2
+                ;;
+            --copy-dupes=*)
+                copy_dupes_dir="${1#--copy-dupes=}"
+                shift
+                ;;
+            --delete-dupes)
+                delete_dupes=1
+                shift
+                ;;
+            -y | --yes)
+                assume_yes
+                shift
+                ;;
+            --keep-png)
+                KEEP_PNG=1
+                shift
+                ;;
+            --heic-to-jpeg)
+                HEIC_TO_JPEG=1
+                shift
+                ;;
+            --optimize-png)
+                OPTIMIZE_PNG=1
+                shift
+                ;;
+            --level)
+                [[ $# -ge 2 ]] || fail "--level requires a value"
+                level="$2"
+                shift 2
+                ;;
+            --level=*)
+                level="${1#--level=}"
+                shift
+                ;;
+            --only-exts)
+                [[ $# -ge 2 ]] || fail "--only-exts requires a value"
+                FILTER_EXTS="$2"
+                shift 2
+                ;;
+            --only-exts=*)
+                FILTER_EXTS="${1#--only-exts=}"
+                shift
+                ;;
+            --skip-exts)
+                [[ $# -ge 2 ]] || fail "--skip-exts requires a value"
+                SKIP_EXTS="$2"
+                shift 2
+                ;;
+            --skip-exts=*)
+                SKIP_EXTS="${1#--skip-exts=}"
+                shift
+                ;;
+            --jobs)
+                [[ $# -ge 2 ]] || fail "--jobs requires a value"
+                PARALLEL_JOBS="$2"
+                shift 2
+                ;;
+            --jobs=*)
+                PARALLEL_JOBS="${1#--jobs=}"
+                shift
+                ;;
+            --log)
+                [[ $# -ge 2 ]] || fail "--log requires a value"
+                log_file="$2"
+                shift 2
+                ;;
+            --log=*)
+                log_file="${1#--log=}"
+                shift
+                ;;
+            --jpeg-quality)
+                [[ $# -ge 2 ]] || fail "--jpeg-quality requires a value"
+                ov_jpeg_quality="$2"
+                shift 2
+                ;;
+            --jpeg-quality=*)
+                ov_jpeg_quality="${1#--jpeg-quality=}"
+                shift
+                ;;
+            --max-image-dim)
+                [[ $# -ge 2 ]] || fail "--max-image-dim requires a value"
+                ov_img_max_dim="$2"
+                shift 2
+                ;;
+            --max-image-dim=*)
+                ov_img_max_dim="${1#--max-image-dim=}"
+                shift
+                ;;
+            --crf)
+                [[ $# -ge 2 ]] || fail "--crf requires a value"
+                ov_crf="$2"
+                shift 2
+                ;;
+            --crf=*)
+                ov_crf="${1#--crf=}"
+                shift
+                ;;
+            --preset)
+                [[ $# -ge 2 ]] || fail "--preset requires a value"
+                ov_preset="$2"
+                shift 2
+                ;;
+            --preset=*)
+                ov_preset="${1#--preset=}"
+                shift
+                ;;
+            --max-width)
+                [[ $# -ge 2 ]] || fail "--max-width requires a value"
+                ov_max_w="$2"
+                shift 2
+                ;;
+            --max-width=*)
+                ov_max_w="${1#--max-width=}"
+                shift
+                ;;
+            --max-height)
+                [[ $# -ge 2 ]] || fail "--max-height requires a value"
+                ov_max_h="$2"
+                shift 2
+                ;;
+            --max-height=*)
+                ov_max_h="${1#--max-height=}"
+                shift
+                ;;
+            --audio-bitrate)
+                [[ $# -ge 2 ]] || fail "--audio-bitrate requires a value"
+                ov_audio="$2"
+                shift 2
+                ;;
+            --audio-bitrate=*)
+                ov_audio="${1#--audio-bitrate=}"
+                shift
+                ;;
+            --min-photo-mb)
+                [[ $# -ge 2 ]] || fail "--min-photo-mb requires a value"
+                ov_min_photo_mb="$2"
+                shift 2
+                ;;
+            --min-photo-mb=*)
+                ov_min_photo_mb="${1#--min-photo-mb=}"
+                shift
+                ;;
+            --min-video-mb)
+                [[ $# -ge 2 ]] || fail "--min-video-mb requires a value"
+                ov_min_video_mb="$2"
+                shift 2
+                ;;
+            --min-video-mb=*)
+                ov_min_video_mb="${1#--min-video-mb=}"
+                shift
+                ;;
+            --)
+                shift
+                positional+=("$@")
+                break
+                ;;
+            -*) fail "Unknown option: $1" ;;
+            *)
+                positional+=("$1")
+                shift
+                ;;
         esac
     done
 
-    [[ ${#positional[@]} -ge 1 ]] || { optimize_usage >&2; exit 1; }
+    [[ ${#positional[@]} -ge 1 ]] || {
+        optimize_usage >&2
+        exit 1
+    }
 
     # ── Duplicate management mode (mutually exclusive with optimization) ────────
     if [[ -n "$copy_dupes_dir" || "$delete_dupes" -eq 1 ]]; then
-        local target_abs; target_abs=$(abs_path "${positional[0]}")
+        local target_abs
+        target_abs=$(abs_path "${positional[0]}")
         [[ -d "$target_abs" ]] || fail "Directory '$target_abs' does not exist"
         if [[ -n "$log_file" ]]; then
             exec > >(tee -a "$log_file") 2>&1
@@ -856,11 +1042,12 @@ optimize_main() {
         echo "============================================"
         echo
         if [[ -n "$copy_dupes_dir" ]]; then
-            local dupes_abs; dupes_abs=$(abs_path "$copy_dupes_dir")
+            local dupes_abs
+            dupes_abs=$(abs_path "$copy_dupes_dir")
             run_copy_dupes "$target_abs" "$dupes_abs"
             echo
         fi
-        if (( delete_dupes )); then
+        if ((delete_dupes)); then
             run_delete_dupes "$target_abs"
         fi
         exit 0
@@ -870,7 +1057,7 @@ optimize_main() {
         fail "--only-exts and --skip-exts are mutually exclusive"
     fi
     case "$level" in
-        archive|moderate|aggressive|maximum) ;;
+        archive | moderate | aggressive | maximum) ;;
         *) fail "--level must be: archive, moderate, aggressive, or maximum" ;;
     esac
     if ! [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] || ((PARALLEL_JOBS < 1)); then
@@ -881,78 +1068,82 @@ optimize_main() {
     LEVEL="$level"
     case "$level" in
         archive)
-            JPEG_QUALITY=$ARC_JPEG_QUALITY  IMG_MAX_DIM=$ARC_IMG_MAX_DIM
-            VIDEO_CRF=$ARC_VIDEO_CRF        VIDEO_PRESET=$ARC_VIDEO_PRESET
-            VIDEO_MAX_W=$ARC_VIDEO_MAX_W    VIDEO_MAX_H=$ARC_VIDEO_MAX_H
-            AUDIO_BITRATE=$ARC_AUDIO_BITRATE REENCODE_ALL_VIDEO=$ARC_REENCODE_ALL_VIDEO ;;
+            JPEG_QUALITY=$ARC_JPEG_QUALITY IMG_MAX_DIM=$ARC_IMG_MAX_DIM
+            VIDEO_CRF=$ARC_VIDEO_CRF VIDEO_PRESET=$ARC_VIDEO_PRESET
+            VIDEO_MAX_W=$ARC_VIDEO_MAX_W VIDEO_MAX_H=$ARC_VIDEO_MAX_H
+            AUDIO_BITRATE=$ARC_AUDIO_BITRATE REENCODE_ALL_VIDEO=$ARC_REENCODE_ALL_VIDEO
+            ;;
         moderate)
-            JPEG_QUALITY=$MOD_JPEG_QUALITY  IMG_MAX_DIM=$MOD_IMG_MAX_DIM
-            VIDEO_CRF=$MOD_VIDEO_CRF        VIDEO_PRESET=$MOD_VIDEO_PRESET
-            VIDEO_MAX_W=$MOD_VIDEO_MAX_W    VIDEO_MAX_H=$MOD_VIDEO_MAX_H
-            AUDIO_BITRATE=$MOD_AUDIO_BITRATE REENCODE_ALL_VIDEO=$MOD_REENCODE_ALL_VIDEO ;;
+            JPEG_QUALITY=$MOD_JPEG_QUALITY IMG_MAX_DIM=$MOD_IMG_MAX_DIM
+            VIDEO_CRF=$MOD_VIDEO_CRF VIDEO_PRESET=$MOD_VIDEO_PRESET
+            VIDEO_MAX_W=$MOD_VIDEO_MAX_W VIDEO_MAX_H=$MOD_VIDEO_MAX_H
+            AUDIO_BITRATE=$MOD_AUDIO_BITRATE REENCODE_ALL_VIDEO=$MOD_REENCODE_ALL_VIDEO
+            ;;
         aggressive)
-            JPEG_QUALITY=$AGG_JPEG_QUALITY  IMG_MAX_DIM=$AGG_IMG_MAX_DIM
-            VIDEO_CRF=$AGG_VIDEO_CRF        VIDEO_PRESET=$AGG_VIDEO_PRESET
-            VIDEO_MAX_W=$AGG_VIDEO_MAX_W    VIDEO_MAX_H=$AGG_VIDEO_MAX_H
-            AUDIO_BITRATE=$AGG_AUDIO_BITRATE REENCODE_ALL_VIDEO=$AGG_REENCODE_ALL_VIDEO ;;
+            JPEG_QUALITY=$AGG_JPEG_QUALITY IMG_MAX_DIM=$AGG_IMG_MAX_DIM
+            VIDEO_CRF=$AGG_VIDEO_CRF VIDEO_PRESET=$AGG_VIDEO_PRESET
+            VIDEO_MAX_W=$AGG_VIDEO_MAX_W VIDEO_MAX_H=$AGG_VIDEO_MAX_H
+            AUDIO_BITRATE=$AGG_AUDIO_BITRATE REENCODE_ALL_VIDEO=$AGG_REENCODE_ALL_VIDEO
+            ;;
         maximum)
-            JPEG_QUALITY=$MAX_JPEG_QUALITY  IMG_MAX_DIM=$MAX_IMG_MAX_DIM
-            VIDEO_CRF=$MAX_VIDEO_CRF        VIDEO_PRESET=$MAX_VIDEO_PRESET
-            VIDEO_MAX_W=$MAX_VIDEO_MAX_W    VIDEO_MAX_H=$MAX_VIDEO_MAX_H
-            AUDIO_BITRATE=$MAX_AUDIO_BITRATE REENCODE_ALL_VIDEO=$MAX_REENCODE_ALL_VIDEO ;;
+            JPEG_QUALITY=$MAX_JPEG_QUALITY IMG_MAX_DIM=$MAX_IMG_MAX_DIM
+            VIDEO_CRF=$MAX_VIDEO_CRF VIDEO_PRESET=$MAX_VIDEO_PRESET
+            VIDEO_MAX_W=$MAX_VIDEO_MAX_W VIDEO_MAX_H=$MAX_VIDEO_MAX_H
+            AUDIO_BITRATE=$MAX_AUDIO_BITRATE REENCODE_ALL_VIDEO=$MAX_REENCODE_ALL_VIDEO
+            ;;
     esac
 
     # Apply individual overrides
     if [[ -n "$ov_jpeg_quality" ]]; then
         JPEG_QUALITY="$ov_jpeg_quality"
     fi
-    if [[ -n "$ov_img_max_dim"  ]]; then
+    if [[ -n "$ov_img_max_dim" ]]; then
         IMG_MAX_DIM="$ov_img_max_dim"
     fi
-    if [[ -n "$ov_crf"          ]]; then
+    if [[ -n "$ov_crf" ]]; then
         VIDEO_CRF="$ov_crf"
     fi
-    if [[ -n "$ov_preset"       ]]; then
+    if [[ -n "$ov_preset" ]]; then
         VIDEO_PRESET="$ov_preset"
     fi
-    if [[ -n "$ov_max_w"        ]]; then
+    if [[ -n "$ov_max_w" ]]; then
         VIDEO_MAX_W="$ov_max_w"
     fi
-    if [[ -n "$ov_max_h"        ]]; then
+    if [[ -n "$ov_max_h" ]]; then
         VIDEO_MAX_H="$ov_max_h"
     fi
-    if [[ -n "$ov_audio"        ]]; then
+    if [[ -n "$ov_audio" ]]; then
         AUDIO_BITRATE="$ov_audio"
     fi
     if [[ -n "$ov_min_photo_mb" ]]; then
         [[ "$ov_min_photo_mb" =~ ^[0-9]+$ ]] || fail "--min-photo-mb must be an integer"
-        MIN_PHOTO_BYTES=$(( ov_min_photo_mb * 1024 * 1024 ))
+        MIN_PHOTO_BYTES=$((ov_min_photo_mb * 1024 * 1024))
     fi
     if [[ -n "$ov_min_video_mb" ]]; then
         [[ "$ov_min_video_mb" =~ ^[0-9]+$ ]] || fail "--min-video-mb must be an integer"
-        MIN_VIDEO_BYTES=$(( ov_min_video_mb * 1024 * 1024 ))
+        MIN_VIDEO_BYTES=$((ov_min_video_mb * 1024 * 1024))
     fi
 
     # Validate
-    [[ "$JPEG_QUALITY"    =~ ^[0-9]+$ ]] || fail "--jpeg-quality must be an integer"
-    [[ "$IMG_MAX_DIM"     =~ ^[0-9]+$ ]] || fail "--max-image-dim must be an integer"
-    [[ "$VIDEO_CRF"       =~ ^[0-9]+$ ]] || fail "--crf must be an integer"
-    [[ "$VIDEO_MAX_W"     =~ ^[0-9]+$ ]] || fail "--max-width must be an integer"
-    [[ "$VIDEO_MAX_H"     =~ ^[0-9]+$ ]] || fail "--max-height must be an integer"
-    [[ "$AUDIO_BITRATE"   =~ ^[0-9]+[kKmM]?$ ]] || fail "--audio-bitrate must be like 192k"
+    [[ "$JPEG_QUALITY" =~ ^[0-9]+$ ]] || fail "--jpeg-quality must be an integer"
+    [[ "$IMG_MAX_DIM" =~ ^[0-9]+$ ]] || fail "--max-image-dim must be an integer"
+    [[ "$VIDEO_CRF" =~ ^[0-9]+$ ]] || fail "--crf must be an integer"
+    [[ "$VIDEO_MAX_W" =~ ^[0-9]+$ ]] || fail "--max-width must be an integer"
+    [[ "$VIDEO_MAX_H" =~ ^[0-9]+$ ]] || fail "--max-height must be an integer"
+    [[ "$AUDIO_BITRATE" =~ ^[0-9]+[kKmM]?$ ]] || fail "--audio-bitrate must be like 192k"
     case "$VIDEO_PRESET" in
-        ultrafast|superfast|veryfast|faster|fast|medium|slow|slower|veryslow) ;;
+        ultrafast | superfast | veryfast | faster | fast | medium | slow | slower | veryslow) ;;
         *) fail "--preset must be: ultrafast superfast veryfast faster fast medium slow slower veryslow" ;;
     esac
 
     # --resume implies --skip-copy
-    if (( resume )); then
+    if ((resume)); then
         skip_copy=1
     fi
     RESUME="$resume"
 
     local source_dir dest_dir
-    if (( skip_copy )) && [[ ${#positional[@]} -eq 1 ]]; then
+    if ((skip_copy)) && [[ ${#positional[@]} -eq 1 ]]; then
         # --skip-copy with one arg: that arg IS the directory to optimize in-place
         source_dir="${positional[0]}"
         dest_dir="${positional[0]}"
@@ -974,24 +1165,24 @@ optimize_main() {
     src_abs="$(abs_path "$source_dir")"
     dest_abs="$(abs_path "$dest_dir")"
 
-    if [[ -f "$dest_abs/.optimize_progress" ]] && (( ! resume )); then
+    if [[ -f "$dest_abs/.optimize_progress" ]] && ((!resume)); then
         echo "Warning: '$dest_abs/.optimize_progress' found — a previous run may have been interrupted."
         echo "         Run with --resume to continue from where it stopped."
         echo
     fi
 
-    if (( ! skip_copy )); then
+    if ((!skip_copy)); then
         require_command rsync
-        if [[ -e "$dest_abs"              ]]; then
+        if [[ -e "$dest_abs" ]]; then
             fail "Destination '$dest_abs' already exists. Delete it or use --skip-copy."
         fi
-        if [[ "$dest_abs" == "$src_abs"   ]]; then
+        if [[ "$dest_abs" == "$src_abs" ]]; then
             fail "Destination must differ from source."
         fi
         if [[ "$dest_abs" == "$src_abs"/* ]]; then
             fail "Destination may not be inside source."
         fi
-        if [[ "$src_abs"  == "$dest_abs"/* ]]; then
+        if [[ "$src_abs" == "$dest_abs"/* ]]; then
             fail "Source may not be inside destination."
         fi
     else
@@ -999,7 +1190,7 @@ optimize_main() {
     fi
 
     echo "============================================"
-    if (( skip_copy )); then
+    if ((skip_copy)); then
         printf 'Directory   : %s\n' "$dest_abs"
     else
         printf 'Source      : %s\n' "$src_abs"
@@ -1009,14 +1200,14 @@ optimize_main() {
     if [[ -n "$FILTER_EXTS" ]]; then
         printf 'Only exts   : %s\n' "$FILTER_EXTS"
     fi
-    if [[ -n "$SKIP_EXTS"   ]]; then
+    if [[ -n "$SKIP_EXTS" ]]; then
         printf 'Skip exts   : %s\n' "$SKIP_EXTS"
     fi
-    if (( MIN_PHOTO_BYTES > 0 )); then
-        printf 'Min photo   : %d MB (skip smaller)\n' "$(( MIN_PHOTO_BYTES / 1024 / 1024 ))"
+    if ((MIN_PHOTO_BYTES > 0)); then
+        printf 'Min photo   : %d MB (skip smaller)\n' "$((MIN_PHOTO_BYTES / 1024 / 1024))"
     fi
-    if (( MIN_VIDEO_BYTES > 0 )); then
-        printf 'Min video   : %d MB (skip smaller)\n' "$(( MIN_VIDEO_BYTES / 1024 / 1024 ))"
+    if ((MIN_VIDEO_BYTES > 0)); then
+        printf 'Min video   : %d MB (skip smaller)\n' "$((MIN_VIDEO_BYTES / 1024 / 1024))"
     fi
     printf 'Settings    : JPEG/PNG %d  max-dim %dpx  CRF %d  preset %s  %dx%d  audio %s\n' \
         "$JPEG_QUALITY" "$IMG_MAX_DIM" \
@@ -1029,7 +1220,7 @@ optimize_main() {
         exit 0
     fi
 
-    if (( ! skip_copy )); then
+    if ((!skip_copy)); then
         check_free_space "$src_abs" "$(dirname "$dest_abs")" "$level"
     fi
     init_image_tool
@@ -1041,7 +1232,7 @@ optimize_main() {
     STATS_DIR=$(mktemp -d)
     local START_TIME=$SECONDS
 
-    if (( ! skip_copy )); then
+    if ((!skip_copy)); then
         echo "Step 1/2: Copying '$src_abs' → '$dest_abs' ..."
         mkdir -p "$dest_abs"
         rsync -a --info=progress2 --human-readable "$src_abs"/ "$dest_abs"/
@@ -1053,7 +1244,7 @@ optimize_main() {
     echo
     run_optimization "$dest_abs"
 
-    local elapsed=$(( SECONDS - START_TIME ))
+    local elapsed=$((SECONDS - START_TIME))
     print_summary "$STATS_DIR" "$elapsed"
     print_top_savings "$STATS_DIR"
 
@@ -1065,14 +1256,14 @@ optimize_main() {
     echo
     echo "Done."
     echo "  Optimized copy : $dest_abs"
-    if (( ! skip_copy )); then
+    if ((!skip_copy)); then
         echo "  Original       : $src_abs  (untouched)"
     fi
 
     # Final folder statistics
     local stats_script="$MOT_LIB/../bin/mot"
     if [[ -x "$stats_script" ]]; then
-        if (( ! skip_copy )); then
+        if ((!skip_copy)); then
             echo
             echo "============================================"
             echo "Folder stats: original"

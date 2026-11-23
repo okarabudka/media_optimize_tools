@@ -34,8 +34,8 @@ print_directory_usage() {
 
 print_problematic_files() {
     local target="$1" photo_mb="$2" video_mb="$3"
-    local photo_bytes=$(( photo_mb * 1024 * 1024 ))
-    local video_bytes=$(( video_mb * 1024 * 1024 ))
+    local photo_bytes=$((photo_mb * 1024 * 1024))
+    local video_bytes=$((video_mb * 1024 * 1024))
 
     echo
     echo "Files that need aggressive compression:"
@@ -49,44 +49,48 @@ print_problematic_files() {
         local sz path ext
         sz="${line%%$'\t'*}"
         path="${line#*$'\t'}"
-        ext="${path##*.}"; ext="${ext,,}"
+        ext="${path##*.}"
+        ext="${ext,,}"
 
         case "$ext" in
-            jpg|jpeg|png|webp)
-                if (( sz >= photo_bytes )); then
+            jpg | jpeg | png | webp)
+                if ((sz >= photo_bytes)); then
                     printf '  [photo %5.1f MB]  %s\n' "$(awk -v s="$sz" 'BEGIN{printf "%.1f", s/1024/1024}')" "$path"
-                    (( ++photo_count ))
-                    (( photo_total += sz ))
-                fi ;;
+                    ((++photo_count))
+                    ((photo_total += sz))
+                fi
+                ;;
             mov)
                 printf '  [MOV   %5.1f MB]  %s\n' "$(awk -v s="$sz" 'BEGIN{printf "%.1f", s/1024/1024}')" "$path"
-                (( ++mov_count ))
-                (( mov_total += sz )) ;;
-            mp4|mkv|avi|m4v|webm|mpg|mpeg)
-                if (( sz >= video_bytes )); then
+                ((++mov_count))
+                ((mov_total += sz))
+                ;;
+            mp4 | mkv | avi | m4v | webm | mpg | mpeg)
+                if ((sz >= video_bytes)); then
                     printf '  [video %5.1f MB]  %s\n' "$(awk -v s="$sz" 'BEGIN{printf "%.1f", s/1024/1024}')" "$path"
-                    (( ++video_count ))
-                    (( video_total += sz ))
-                fi ;;
+                    ((++video_count))
+                    ((video_total += sz))
+                fi
+                ;;
         esac
     done < <(find "$target" -type f -printf '%s\t%p\0' | sort -rz)
 
-    local total_count=$(( photo_count + video_count + mov_count ))
-    local total_bytes=$(( photo_total + video_total + mov_total ))
+    local total_count=$((photo_count + video_count + mov_count))
+    local total_bytes=$((photo_total + video_total + mov_total))
 
     echo
-    if (( total_count == 0 )); then
+    if ((total_count == 0)); then
         echo "  No problematic files found."
         return
     fi
 
-    if (( photo_count > 0 )); then
+    if ((photo_count > 0)); then
         printf '  Large photos : %d files  %.1f MB\n' "$photo_count" "$(awk -v s="$photo_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
     fi
-    if (( mov_count   > 0 )); then
-        printf '  MOV files    : %d files  %.1f MB\n' "$mov_count"   "$(awk -v s="$mov_total"   'BEGIN{printf "%.1f", s/1024/1024}')"
+    if ((mov_count > 0)); then
+        printf '  MOV files    : %d files  %.1f MB\n' "$mov_count" "$(awk -v s="$mov_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
     fi
-    if (( video_count > 0 )); then
+    if ((video_count > 0)); then
         printf '  Large videos : %d files  %.1f MB\n' "$video_count" "$(awk -v s="$video_total" 'BEGIN{printf "%.1f", s/1024/1024}')"
     fi
     printf '  Total        : %d files  %.1f MB\n' "$total_count" "$(awk -v s="$total_bytes" 'BEGIN{printf "%.1f", s/1024/1024}')"
@@ -109,7 +113,7 @@ print_duplicate_stats() {
 
     local stats_line groups dup_count dup_bytes
     stats_line=$(head -1 "$tmp_dupes")
-    IFS=$'\t' read -r _ groups dup_count dup_bytes <<< "$stats_line"
+    IFS=$'\t' read -r _ groups dup_count dup_bytes <<<"$stats_line"
 
     if [[ "$groups" == "0" || -z "$groups" ]]; then
         rm -f "$tmp_dupes"
@@ -143,8 +147,8 @@ print_subdirs_summary() {
         size=$(du -sh "$d" 2>/dev/null | cut -f1)
         count=$(find "$d" -type f | wc -l)
         printf '%s\t%s\t%d files\n' "$d" "$size" "$count"
-    done < <(find "$target" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z) \
-        | sort > "$tmp_out"
+    done < <(find "$target" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z) |
+        sort >"$tmp_out"
 
     if [[ ! -s "$tmp_out" ]]; then
         echo "  No subdirectories found."
@@ -156,7 +160,7 @@ print_subdirs_summary() {
     awk -F'\t' '{ printf "  %-50s  %6s  %s\n", $1, $2, $3 }' "$tmp_out"
 
     local total_dirs total_files
-    total_dirs=$(wc -l < "$tmp_out")
+    total_dirs=$(wc -l <"$tmp_out")
     total_files=$(awk -F'\t' '{ gsub(/ files$/, "", $3); sum += $3 } END { print sum+0 }' "$tmp_out")
     echo
     printf '  Directories: %d   Total files: %d\n' "$total_dirs" "$total_files"
@@ -166,11 +170,11 @@ print_subdirs_summary() {
 
 print_largest_files() {
     local target="$1" limit="$2" photo_mb="$3" video_mb="$4"
-    local photo_bytes=$(( photo_mb * 1024 * 1024 ))
-    local video_bytes=$(( video_mb * 1024 * 1024 ))
+    local photo_bytes=$((photo_mb * 1024 * 1024))
+    local video_bytes=$((video_mb * 1024 * 1024))
     echo
     echo "Top $limit largest files (photos > ${photo_mb} MB, videos > ${video_mb} MB):"
-    find "$target" -type f -printf '%s\t%p\n' | sort -t$'\t' -k1,1nr | \
+    find "$target" -type f -printf '%s\t%p\n' | sort -t$'\t' -k1,1nr |
         awk -F'\t' -v pb="$photo_bytes" -v vb="$video_bytes" -v lim="$limit" '
         count >= lim { exit }
         {
@@ -198,51 +202,83 @@ stats_main() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -h|--help)
-                stats_usage; exit 0 ;;
+            -h | --help)
+                stats_usage
+                exit 0
+                ;;
             --dupes)
-                show_dupes=1; shift ;;
+                show_dupes=1
+                shift
+                ;;
             --subdirs)
-                show_subdirs=1; shift ;;
+                show_subdirs=1
+                shift
+                ;;
             --depth)
                 [[ $# -ge 2 ]] || fail "--depth requires a value"
-                depth="$2"; shift 2 ;;
+                depth="$2"
+                shift 2
+                ;;
             --depth=*)
-                depth="${1#--depth=}"; shift ;;
+                depth="${1#--depth=}"
+                shift
+                ;;
             --top-files)
                 [[ $# -ge 2 ]] || fail "--top-files requires a value"
-                top_files="$2"; shift 2 ;;
+                top_files="$2"
+                shift 2
+                ;;
             --top-files=*)
-                top_files="${1#--top-files=}"; shift ;;
+                top_files="${1#--top-files=}"
+                shift
+                ;;
             --photo-mb)
                 [[ $# -ge 2 ]] || fail "--photo-mb requires a value"
-                photo_mb="$2"; shift 2 ;;
+                photo_mb="$2"
+                shift 2
+                ;;
             --photo-mb=*)
-                photo_mb="${1#--photo-mb=}"; shift ;;
+                photo_mb="${1#--photo-mb=}"
+                shift
+                ;;
             --video-mb)
                 [[ $# -ge 2 ]] || fail "--video-mb requires a value"
-                video_mb="$2"; shift 2 ;;
+                video_mb="$2"
+                shift 2
+                ;;
             --video-mb=*)
-                video_mb="${1#--video-mb=}"; shift ;;
+                video_mb="${1#--video-mb=}"
+                shift
+                ;;
             --log)
                 [[ $# -ge 2 ]] || fail "--log requires a value"
-                log_file="$2"; shift 2 ;;
+                log_file="$2"
+                shift 2
+                ;;
             --log=*)
-                log_file="${1#--log=}"; shift ;;
+                log_file="${1#--log=}"
+                shift
+                ;;
             -*)
-                fail "Unknown option: $1" ;;
+                fail "Unknown option: $1"
+                ;;
             *)
                 [[ -z "$target_dir" ]] || fail "Unexpected argument: $1"
-                target_dir="$1"; shift ;;
+                target_dir="$1"
+                shift
+                ;;
         esac
     done
 
-    [[ -n "$target_dir" ]] || { stats_usage >&2; exit 1; }
+    [[ -n "$target_dir" ]] || {
+        stats_usage >&2
+        exit 1
+    }
     [[ -d "$target_dir" ]] || fail "Directory '$target_dir' does not exist"
-    [[ "$depth"     =~ ^[0-9]+$ ]] || fail "--depth must be an integer"
+    [[ "$depth" =~ ^[0-9]+$ ]] || fail "--depth must be an integer"
     [[ "$top_files" =~ ^[0-9]+$ ]] || fail "--top-files must be an integer"
-    [[ "$photo_mb"  =~ ^[0-9]+$ ]] || fail "--photo-mb must be an integer"
-    [[ "$video_mb"  =~ ^[0-9]+$ ]] || fail "--video-mb must be an integer"
+    [[ "$photo_mb" =~ ^[0-9]+$ ]] || fail "--photo-mb must be an integer"
+    [[ "$video_mb" =~ ^[0-9]+$ ]] || fail "--video-mb must be an integer"
 
     require_command du
     require_command find
@@ -259,13 +295,13 @@ stats_main() {
     print_directory_usage "$target_dir" "$depth"
     print_largest_files "$target_dir" "$top_files" "$photo_mb" "$video_mb"
     print_problematic_files "$target_dir" "$photo_mb" "$video_mb"
-    if (( show_dupes )); then
+    if ((show_dupes)); then
         print_duplicate_stats "$target_dir"
     fi
-    if (( show_subdirs )); then
+    if ((show_subdirs)); then
         print_subdirs_summary "$target_dir"
     fi
 
     echo
-    printf 'Elapsed: %s\n' "$(format_elapsed "$(( SECONDS - START_TIME ))")"
+    printf 'Elapsed: %s\n' "$(format_elapsed "$((SECONDS - START_TIME))")"
 }
