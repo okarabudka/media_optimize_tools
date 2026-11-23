@@ -53,7 +53,7 @@ print_problematic_files() {
         ext="${ext,,}"
 
         case "$ext" in
-            jpg | jpeg | png | webp)
+            jpg | jpeg | png | webp | heic | heif)
                 if ((sz >= photo_bytes)); then
                     printf '  [photo %5.1f MB]  %s\n' "$(awk -v s="$sz" 'BEGIN{printf "%.1f", s/1024/1024}')" "$path"
                     ((++photo_count))
@@ -180,7 +180,7 @@ print_largest_files() {
         {
             sz = $1 + 0; path = $2
             ext = tolower(path); sub(/.*\./, "", ext)
-            if (ext ~ /^(jpg|jpeg|png|webp)$/ && sz < pb) next
+            if (ext ~ /^(jpg|jpeg|png|webp|heic|heif)$/ && sz < pb) next
             if (ext ~ /^(mp4|mkv|avi|m4v|webm|mpg|mpeg|mov)$/ && sz < vb) next
             if (sz >= 1073741824)      printf "  %6.1f GB  %s\n", sz/1073741824, path
             else if (sz >= 1048576)    printf "  %6.1f MB  %s\n", sz/1048576, path

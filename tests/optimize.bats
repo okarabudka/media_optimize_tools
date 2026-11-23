@@ -17,7 +17,7 @@ setup() {
 
     [[ "$output" == *"DRY RUN"* ]]
     [[ "$output" =~ Photos\ +1\ files ]]
-    [[ "$output" =~ MOV/VOB→MP4\ +1\ files ]]
+    [[ "$output" =~ MOV/VOB\ to\ MP4\ +1\ files ]]
     [[ "$output" =~ MP4/MKV\ +1\ files ]]
     [[ ! -e "$OUT" ]]
     [[ "$(checksum "$SRC/photo.jpg")" == "$before" ]]
@@ -234,5 +234,5 @@ setup() {
 
     run -0 mot optimize --dry-run --heic-to-jpeg "$SRC" "$OUT"
 
-    [[ "$output" =~ HEIC→JPEG\ +1\ files ]]
+    [[ "$output" =~ HEIC\ to\ JPEG\ +1\ files ]]
 }

@@ -690,28 +690,28 @@ run_dry_run() {
         printf 'Skip exts   : %s\n' "$SKIP_EXTS"
     fi
     echo
-    printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
+    printf '%-14s  %5s files  %12s → %12s  ~%s\n' \
         "Photos" "${#img_files[@]}" \
         "$(format_bytes "$img_sz")" "$(format_bytes "$img_est")" \
         "$(format_percent "$img_sz" "$img_est")"
     if ((${#heic_files[@]} > 0)); then
-        printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
-            "HEIC→JPEG" "${#heic_files[@]}" \
+        printf '%-14s  %5s files  %12s → %12s  ~%s\n' \
+            "HEIC to JPEG" "${#heic_files[@]}" \
             "$(format_bytes "$heic_sz")" "$(format_bytes "$heic_est")" \
             "$(format_percent "$heic_sz" "$heic_est")"
     fi
-    printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
-        "MOV/VOB→MP4" "${#video_primary[@]}" \
+    printf '%-14s  %5s files  %12s → %12s  ~%s\n' \
+        "MOV/VOB to MP4" "${#video_primary[@]}" \
         "$(format_bytes "$vid_sz")" "$(format_bytes "$vid_est")" \
         "$(format_percent "$vid_sz" "$vid_est")"
     if ((REENCODE_ALL_VIDEO && other_sz > 0)); then
-        printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
+        printf '%-14s  %5s files  %12s → %12s  ~%s\n' \
             "MP4/MKV" "${#video_other[@]}" \
             "$(format_bytes "$other_sz")" "$(format_bytes "$other_est")" \
             "$(format_percent "$other_sz" "$other_est")"
     fi
     echo "──────────────────────────────────────────────────────────────────"
-    printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
+    printf '%-14s  %5s files  %12s → %12s  ~%s\n' \
         "Total" "$((${#img_files[@]} + ${#heic_files[@]} + ${#video_primary[@]} + ${#video_other[@]}))" \
         "$(format_bytes "$total_before")" "$(format_bytes "$total_after")" \
         "$(format_percent "$total_before" "$total_after")"
