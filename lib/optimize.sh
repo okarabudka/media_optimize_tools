@@ -50,6 +50,8 @@ Options:
   --copy-dupes DIR            Find duplicate files and copy redundant ones to DIR
   --delete-dupes              Find duplicate files and delete redundant ones (asks confirmation)
   -y, --yes                   Answer yes to confirmations (duplicate deletion, low disk space)
+  --heic-to-jpeg              Convert HEIC/HEIF photos to JPEG for compatibility, even when
+                              the JPEG is larger (EXIF kept). Without it HEIC is not touched.
   --keep-png                  Keep all PNGs as PNG (PNGs with transparency always stay PNG)
   --optimize-png              Recompress PNGs that stay PNG losslessly (default: leave them as is)
   --log FILE                  Append all output to FILE and terminal
@@ -162,6 +164,18 @@ init_image_tool() {
     fi
 }
 run_convert() { "${IMGCMD[@]}" "$@"; }
+
+# HEIC decoder: ImageMagick built with libheif, else heif-convert from libheif-examples.
+HEIC_DECODER=""
+init_heic_decoder() {
+    if "${IMGCMD[@]}" -list format 2>/dev/null | grep -Eq '^ *HEIC\*? +HEIC +r'; then
+        HEIC_DECODER=imagemagick
+    elif command -v heif-convert >/dev/null 2>&1; then
+        HEIC_DECODER=heif-convert
+    else
+        fail "--heic-to-jpeg needs ImageMagick with HEIC support (libheif) or heif-convert."
+    fi
+}
 run_identify() {
     if [[ "${IMGCMD[0]}" == magick ]]; then
         magick identify "$@"
@@ -186,6 +200,7 @@ PARALLEL_JOBS=1
 PROGRESS_FILE=""   # path to resume progress file; empty = no tracking
 OPT_ROOT=""        # directory being optimized; progress entries are relative to it
 KEEP_PNG=0         # --keep-png: never convert PNG to JPEG
+HEIC_TO_JPEG=0     # --heic-to-jpeg: convert HEIC/HEIF photos to JPEG
 OPTIMIZE_PNG=0     # --optimize-png: recompress PNGs that stay PNG losslessly
 RESUME=0           # 1 when --resume was passed
 wait_for_slot() {
@@ -197,7 +212,7 @@ wait_for_slot() {
 # ── File collection ───────────────────────────────────────────────────────────
 # Single find pass — avoids re-reading the directory tree multiple times.
 # Sets globals (must be declared local -a by the caller):
-#   img_files  img_sizes
+#   img_files  img_sizes   heic_files  heic_sizes
 #   video_primary  video_primary_sizes   video_other  video_other_sizes
 #   skipped_vid  skipped_vid_sizes
 #
@@ -218,6 +233,11 @@ collect_media_files() {
                     continue
                 fi
                 img_files+=("$_path"); img_sizes+=("$_sz") ;;
+            heic|heif)
+                if ((!HEIC_TO_JPEG)) || ((MIN_PHOTO_BYTES > 0 && _sz < MIN_PHOTO_BYTES)); then
+                    continue
+                fi
+                heic_files+=("$_path"); heic_sizes+=("$_sz") ;;
             mov|vob)
                 if (( MIN_VIDEO_BYTES > 0 && _sz < MIN_VIDEO_BYTES )); then
                     continue
@@ -309,7 +329,20 @@ optimize_photo() {
     local -a ops=(-auto-orient +profile "!exif,!icc,!xmp,*" -resize "${IMG_MAX_DIM}x${IMG_MAX_DIM}>" -quality "$JPEG_QUALITY")
     sz_before=$(stat -c%s -- "$file")
 
-    if [[ "$ext" == png ]]; then
+    local input="$file" keep_larger=0
+    if [[ "$ext" == heic || "$ext" == heif ]]; then
+        # Converted for compatibility even when the JPEG is larger
+        new_ext=jpg
+        keep_larger=1
+        if [[ "$HEIC_DECODER" == heif-convert ]]; then
+            set_tmp_path input "$file" decoded.jpg
+            if ! heif-convert -q 100 "$file" "$input" >/dev/null 2>&1; then
+                rm -f -- "$input"
+                printf 'photo|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
+                return
+            fi
+        fi
+    elif [[ "$ext" == png ]]; then
         if ((KEEP_PNG)) || has_transparency "$file"; then
             if ((!OPTIMIZE_PNG)); then
                 printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
@@ -324,14 +357,19 @@ optimize_photo() {
     fi
     set_tmp_path tmp "$file" "${new_ext:-$ext}"
 
-    if ! run_convert "$file" "${ops[@]}" "$tmp" 2>/dev/null; then
+    local converted=1
+    run_convert "$input" "${ops[@]}" "$tmp" 2>/dev/null || converted=0
+    if [[ "$input" != "$file" ]]; then
+        rm -f -- "$input"
+    fi
+    if ((!converted)); then
         rm -f -- "$tmp"
         printf 'photo|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
         return
     fi
 
     sz_after=$(stat -c%s -- "$tmp")
-    if ((sz_after == 0 || sz_after >= sz_before)); then
+    if ((sz_after == 0 || (sz_after >= sz_before && !keep_larger))); then
         rm -f -- "$tmp"
         printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
         mark_done "$rel"
@@ -486,7 +524,7 @@ run_optimization() {
     local dest="$1"
     local idx
 
-    local -a img_files=() img_sizes=()
+    local -a img_files=() img_sizes=() heic_files=() heic_sizes=()
     local -a video_primary=() video_primary_sizes=()
     local -a video_other=() video_other_sizes=()
     local -a skipped_vid=() skipped_vid_sizes=()
@@ -509,6 +547,7 @@ run_optimization() {
         echo
     fi
 
+    img_files+=("${heic_files[@]+"${heic_files[@]}"}")
     printf 'Found: %d photos, %d videos to process\n' \
         "${#img_files[@]}" "$(( ${#video_primary[@]} + ${#video_other[@]} ))"
     echo
@@ -569,7 +608,7 @@ run_dry_run() {
     echo "Savings estimates are approximate (typical values, actual depends on content)."
     echo
 
-    local -a img_files=() img_sizes=()
+    local -a img_files=() img_sizes=() heic_files=() heic_sizes=()
     local -a video_primary=() video_primary_sizes=()
     local -a video_other=() video_other_sizes=()
     local -a skipped_vid=() skipped_vid_sizes=()
@@ -586,20 +625,24 @@ run_dry_run() {
     esac
 
     # Sum sizes from arrays collected during scan — no stat calls needed
-    local img_sz=0 vid_sz=0 other_sz=0 skipped_sz=0
+    local img_sz=0 vid_sz=0 other_sz=0 skipped_sz=0 heic_sz=0
     local _s
     for _s in "${img_sizes[@]+"${img_sizes[@]}"}";            do (( img_sz     += _s )); done
     for _s in "${video_primary_sizes[@]+"${video_primary_sizes[@]}"}"; do (( vid_sz += _s )); done
     for _s in "${video_other_sizes[@]+"${video_other_sizes[@]}"}";  do (( other_sz  += _s )); done
     for _s in "${skipped_vid_sizes[@]+"${skipped_vid_sizes[@]}"}";  do (( skipped_sz += _s )); done
+    for _s in "${heic_sizes[@]+"${heic_sizes[@]}"}"; do ((heic_sz += _s)); done
 
     local img_est vid_est other_est
     img_est=$(estimate_size "$img_sz" "$img_ratio")
     vid_est=$(estimate_size "$vid_sz" "$vid_ratio")
     other_est=$(estimate_size "$other_sz" "$other_ratio")
+    # JPEG needs about 1.5x the bytes of HEIC at similar quality
+    local heic_est
+    heic_est=$(estimate_size "$heic_sz" -50)
 
-    local total_before=$(( img_sz + vid_sz + other_sz ))
-    local total_after=$(( img_est + vid_est + other_est ))
+    local total_before=$((img_sz + vid_sz + other_sz + heic_sz))
+    local total_after=$((img_est + vid_est + other_est + heic_est))
 
     printf 'Level       : %s\n' "$LEVEL"
     if [[ -n "$FILTER_EXTS" ]]; then
@@ -613,6 +656,12 @@ run_dry_run() {
         "Photos" "${#img_files[@]}" \
         "$(format_bytes "$img_sz")" "$(format_bytes "$img_est")" \
         "$(format_percent "$img_sz" "$img_est")"
+    if ((${#heic_files[@]} > 0)); then
+        printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
+            "HEIC→JPEG" "${#heic_files[@]}" \
+            "$(format_bytes "$heic_sz")" "$(format_bytes "$heic_est")" \
+            "$(format_percent "$heic_sz" "$heic_est")"
+    fi
     printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
         "MOV/VOB→MP4" "$(( ${#video_primary[@]} + ${#video_other[@]} ))" \
         "$(format_bytes "$vid_sz")" "$(format_bytes "$vid_est")" \
@@ -625,7 +674,7 @@ run_dry_run() {
     fi
     echo "──────────────────────────────────────────────────────────────────"
     printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
-        "Total" "$(( ${#img_files[@]} + ${#video_primary[@]} + ${#video_other[@]} ))" \
+        "Total" "$((${#img_files[@]} + ${#heic_files[@]} + ${#video_primary[@]} + ${#video_other[@]}))" \
         "$(format_bytes "$total_before")" "$(format_bytes "$total_after")" \
         "$(format_percent "$total_before" "$total_after")"
 
@@ -756,6 +805,7 @@ optimize_main() {
             --delete-dupes)      delete_dupes=1; shift ;;
             -y|--yes)            assume_yes; shift ;;
             --keep-png)          KEEP_PNG=1; shift ;;
+            --heic-to-jpeg)      HEIC_TO_JPEG=1; shift ;;
             --optimize-png)      OPTIMIZE_PNG=1; shift ;;
             --level)             [[ $# -ge 2 ]] || fail "--level requires a value"; level="$2"; shift 2 ;;
             --level=*)           level="${1#--level=}"; shift ;;
@@ -983,6 +1033,9 @@ optimize_main() {
         check_free_space "$src_abs" "$(dirname "$dest_abs")" "$level"
     fi
     init_image_tool
+    if ((HEIC_TO_JPEG)); then
+        init_heic_decoder
+    fi
     require_command ffmpeg
 
     STATS_DIR=$(mktemp -d)

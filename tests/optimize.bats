@@ -201,3 +201,35 @@ setup() {
     [[ "$output" == *"location.ISO6709=+52.5200+013.4050/"* ]]
     run -0 python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(not d.find(b"moov") < d.find(b"mdat"))' "$OUT/clip.mp4"
 }
+
+@test "HEIC is left alone without --heic-to-jpeg" {
+    heic_encoder_available || skip "no HEIC encoder in this image"
+    make_heic "$SRC/IMG_0001.heic"
+
+    run -0 mot optimize "$SRC" "$OUT"
+
+    [[ "$(checksum "$OUT/IMG_0001.heic")" == "$(checksum "$SRC/IMG_0001.heic")" ]]
+    [[ ! -e "$OUT/IMG_0001.jpg" ]]
+}
+
+@test "--heic-to-jpeg converts HEIC to JPEG with EXIF and mtime" {
+    heic_encoder_available || skip "no HEIC encoder in this image"
+    make_jpeg_with_exif "$BATS_TEST_TMPDIR/exif.jpg" "2019:07:14 10:20:30"
+    magick "$BATS_TEST_TMPDIR/exif.jpg" -quality 90 "$SRC/IMG_0001.HEIC"
+    touch -d '2019-07-14 10:20:30' "$SRC/IMG_0001.HEIC"
+
+    run -0 mot optimize --heic-to-jpeg "$SRC" "$OUT"
+
+    [[ ! -e "$OUT/IMG_0001.HEIC" ]]
+    [[ "$(magick identify -format '%m %[EXIF:DateTimeOriginal]' "$OUT/IMG_0001.jpg")" == "JPEG 2019:07:14 10:20:30" ]]
+    [[ "$(mtime "$OUT/IMG_0001.jpg")" == "$(mtime "$SRC/IMG_0001.HEIC")" ]]
+}
+
+@test "dry-run shows the HEIC conversion" {
+    heic_encoder_available || skip "no HEIC encoder in this image"
+    make_heic "$SRC/IMG_0001.heic"
+
+    run -0 mot optimize --dry-run --heic-to-jpeg "$SRC" "$OUT"
+
+    [[ "$output" == *"HEIC→JPEG"*"1 files"* ]]
+}
