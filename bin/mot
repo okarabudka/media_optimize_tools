@@ -2,6 +2,7 @@
 # mot — media optimize tools. Entry point for all subcommands.
 
 set -Eeuo pipefail
+trap 'echo "Error: unexpected failure in ${BASH_SOURCE[0]##*/} line $LINENO" >&2' ERR
 
 readonly MOT_VERSION="1.0.0"
 MOT_LIB="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib" && pwd)"
