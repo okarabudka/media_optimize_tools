@@ -54,10 +54,13 @@ find_duplicates() {
     python3 "$MOT_LIB/find_dupes.py" "$target" >"$out_file"
 }
 
+MOT_ASSUME_YES=0
+assume_yes() { MOT_ASSUME_YES=1; }
+
 # Reads a yes/no answer from the terminal; anything but y/Y (or no terminal) means no.
 confirm() {
     local prompt="$1" reply=""
-    if [[ "${MOT_ASSUME_YES:-0}" == 1 ]]; then
+    if ((MOT_ASSUME_YES)); then
         return 0
     fi
     printf '%s [y/N] ' "$prompt" >&2

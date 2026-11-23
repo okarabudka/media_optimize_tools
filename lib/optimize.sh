@@ -49,6 +49,7 @@ Options:
                               (implies --skip-copy; use the same --level as the original run)
   --copy-dupes DIR            Find duplicate files and copy redundant ones to DIR
   --delete-dupes              Find duplicate files and delete redundant ones (asks confirmation)
+  -y, --yes                   Answer yes to confirmations (duplicate deletion, low disk space)
   --log FILE                  Append all output to FILE and terminal
   --jobs N                    Parallel workers for photo/video processing (default: 1)
   -h, --help                  Show this help
@@ -119,9 +120,10 @@ check_free_space() {
 
     if (( est_bytes > free_bytes )); then
         echo "WARNING: Estimated output ~$(format_bytes "$est_bytes") but only $(format_bytes "$free_bytes") free on destination." >&2
-        printf 'Continue anyway? [y/N] ' >&2
-        local reply; read -r reply </dev/tty || reply=n
-        [[ "$reply" =~ ^[Yy]$ ]] || { echo "Aborted." >&2; exit 1; }
+        if ! confirm "Continue anyway?"; then
+            echo "Aborted." >&2
+            exit 1
+        fi
     fi
 }
 
@@ -645,9 +647,7 @@ run_delete_dupes() {
     done < <(tail -n +2 "$tmp_dupes")
 
     echo
-    printf 'Delete %d files and free %s? [y/N] ' "$dup_count" "$(format_bytes "$dup_bytes")"
-    local reply; read -r reply </dev/tty || reply=n
-    if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+    if ! confirm "Delete $dup_count files and free $(format_bytes "$dup_bytes")?"; then
         rm -f "$tmp_dupes"
         echo "Aborted."
         return
@@ -689,6 +689,7 @@ optimize_main() {
             --copy-dupes)        [[ $# -ge 2 ]] || fail "--copy-dupes requires a directory"; copy_dupes_dir="$2"; shift 2 ;;
             --copy-dupes=*)      copy_dupes_dir="${1#--copy-dupes=}"; shift ;;
             --delete-dupes)      delete_dupes=1; shift ;;
+            -y|--yes)            assume_yes; shift ;;
             --level)             [[ $# -ge 2 ]] || fail "--level requires a value"; level="$2"; shift 2 ;;
             --level=*)           level="${1#--level=}"; shift ;;
             --only-exts)         [[ $# -ge 2 ]] || fail "--only-exts requires a value"; FILTER_EXTS="$2"; shift 2 ;;
