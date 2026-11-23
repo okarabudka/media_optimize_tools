@@ -30,6 +30,7 @@ RUN apt-get update \
 COPY --from=bats /opt/bats /opt/bats
 RUN ln -s /opt/bats/bin/bats /usr/local/bin/bats
 
+COPY run.sh /opt/mot/
 COPY tests/ /opt/mot/tests/
 WORKDIR /opt/mot
 ENTRYPOINT ["bats"]
