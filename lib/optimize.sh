@@ -157,7 +157,7 @@ IMGCMD=()
 init_image_tool() {
     if command -v magick >/dev/null 2>&1; then
         IMGCMD=(magick)
-    elif command -v convert >/dev/null 2>&1 && convert --version 2>&1 | grep -qi imagemagick; then
+    elif command -v convert >/dev/null 2>&1 && [[ "$(convert --version 2>&1)" == *ImageMagick* ]]; then
         IMGCMD=(convert)
     else
         fail "ImageMagick (magick or convert) is required for photo processing."
@@ -168,7 +168,10 @@ run_convert() { "${IMGCMD[@]}" "$@"; }
 # HEIC decoder: ImageMagick built with libheif, else heif-convert from libheif-examples.
 HEIC_DECODER=""
 init_heic_decoder() {
-    if "${IMGCMD[@]}" -list format 2>/dev/null | grep -Eq '^ *HEIC\*? +HEIC +r'; then
+    # Read the list first: with pipefail, grep -q closing the pipe early fails the producer
+    local formats
+    formats=$("${IMGCMD[@]}" -list format 2>/dev/null) || formats=""
+    if grep -Eq '^ *HEIC\*? +HEIC +r' <<<"$formats"; then
         HEIC_DECODER=imagemagick
     elif command -v heif-convert >/dev/null 2>&1; then
         HEIC_DECODER=heif-convert
