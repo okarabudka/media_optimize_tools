@@ -163,3 +163,41 @@ setup() {
     [[ "$(checksum "$OUT/small.mp4")" == "$(checksum "$SRC/small.mp4")" ]]
     [[ ! -e "$OUT/small-1.mp4" ]]
 }
+
+@test "modification time is preserved for optimized and converted files" {
+    make_jpeg "$SRC/photo.jpg"
+    make_png_opaque "$SRC/shot.png"
+    make_video "$SRC/clip.mov"
+    touch -d '2019-07-14 10:20:30' "$SRC/photo.jpg" "$SRC/shot.png" "$SRC/clip.mov"
+    local expected
+    expected=$(mtime "$SRC/photo.jpg")
+
+    run -0 mot optimize "$SRC" "$OUT"
+
+    (($(stat -c %s "$OUT/photo.jpg") < $(stat -c %s "$SRC/photo.jpg")))
+    [[ "$(mtime "$OUT/photo.jpg")" == "$expected" ]]
+    [[ "$(mtime "$OUT/shot.jpg")" == "$expected" ]]
+    [[ "$(mtime "$OUT/clip.mp4")" == "$expected" ]]
+}
+
+@test "EXIF of photos is preserved" {
+    make_jpeg_with_exif "$SRC/photo.jpg" "2019:07:14 10:20:30"
+
+    run -0 mot optimize --level maximum "$SRC" "$OUT"
+
+    (($(stat -c %s "$OUT/photo.jpg") < $(stat -c %s "$SRC/photo.jpg")))
+    [[ "$(magick identify -format '%[EXIF:DateTimeOriginal]|%[EXIF:Make]' "$OUT/photo.jpg")" == "2019:07:14 10:20:30|TestCam" ]]
+}
+
+@test "video metadata and creation time are preserved, moov atom first" {
+    make_video "$SRC/clip.mov" -movflags use_metadata_tags \
+        -metadata creation_time=2019-07-14T10:20:30Z \
+        -metadata com.apple.quicktime.location.ISO6709=+52.5200+013.4050/
+
+    run -0 mot optimize "$SRC" "$OUT"
+
+    run -0 ffprobe -v error -show_entries format_tags -of default=nw=1 "$OUT/clip.mp4"
+    [[ "$output" == *"creation_time=2019-07-14T10:20:30"* ]]
+    [[ "$output" == *"location.ISO6709=+52.5200+013.4050/"* ]]
+    run -0 python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(not d.find(b"moov") < d.find(b"mdat"))' "$OUT/clip.mp4"
+}

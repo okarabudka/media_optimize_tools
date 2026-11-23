@@ -263,11 +263,14 @@ reserve_free_path() {
     printf '%s\n' "$candidate"
 }
 
-# Moves the finished temp file $1 into place for the source $2.
-# Same extension: replaces the source. New extension $3: reserves a free name and
-# removes the source afterwards. Prints the final path.
+# Moves the finished temp file $1 into place for the source $2, with the source's
+# modification time and permissions. Same extension: replaces the source. New
+# extension $3: reserves a free name and removes the source afterwards.
+# Prints the final path.
 install_result() {
     local tmp="$1" src="$2" new_ext="${3:-}" dst
+    touch -r "$src" -- "$tmp"
+    chmod --reference="$src" -- "$tmp"
     if [[ -z "$new_ext" ]]; then
         mv -f -- "$tmp" "$src"
         printf '%s\n' "$src"
@@ -303,7 +306,7 @@ optimize_photo() {
     ext="${ext,,}"
 
     local tmp sz_before sz_after out
-    local -a ops=(-auto-orient +profile "!exif,*" -resize "${IMG_MAX_DIM}x${IMG_MAX_DIM}>" -quality "$JPEG_QUALITY")
+    local -a ops=(-auto-orient +profile "!exif,!icc,!xmp,*" -resize "${IMG_MAX_DIM}x${IMG_MAX_DIM}>" -quality "$JPEG_QUALITY")
     sz_before=$(stat -c%s -- "$file")
 
     if [[ "$ext" == png ]]; then
@@ -372,7 +375,8 @@ convert_video() {
         -i "$file" -vf "$scale" \
         -c:v libx264 -preset "$VIDEO_PRESET" -crf "$VIDEO_CRF" \
         -level:v 5.2 -fps_mode vfr \
-        -pix_fmt yuv420p -movflags +faststart \
+        -pix_fmt yuv420p \
+        -map_metadata 0 -movflags +faststart+use_metadata_tags \
         -max_muxing_queue_size 4096 \
         -c:a aac -b:a "$AUDIO_BITRATE" "$tmp"; then
         sz_after=$(stat -c%s -- "$tmp")
