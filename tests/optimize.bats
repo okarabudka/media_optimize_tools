@@ -83,3 +83,34 @@ setup() {
 
     [[ -f "$OUT/clip.mov" && ! -e "$OUT/clip.mp4" ]]
 }
+
+@test "PNG to JPEG never overwrites an existing JPEG with the same name" {
+    make_jpeg "$SRC/shot.jpg" 128x128
+    make_png_opaque "$SRC/shot.png" 64x48
+
+    run -0 mot optimize --only-exts png "$SRC" "$OUT"
+
+    [[ "$(checksum "$OUT/shot.jpg")" == "$(checksum "$SRC/shot.jpg")" ]]
+    [[ "$(magick identify -format '%m %wx%h' "$OUT/shot-1.jpg")" == "JPEG 64x48" ]]
+    [[ ! -e "$OUT/shot.png" ]]
+}
+
+@test "MOV to MP4 never overwrites an existing MP4 with the same name" {
+    make_video "$SRC/clip.mp4"
+    make_video "$SRC/clip.mov" -t 0.5
+
+    run -0 mot optimize --only-exts mov "$SRC" "$OUT"
+
+    [[ "$(checksum "$OUT/clip.mp4")" == "$(checksum "$SRC/clip.mp4")" ]]
+    [[ -f "$OUT/clip-1.mp4" && ! -e "$OUT/clip.mov" ]]
+}
+
+@test "no temp files are left behind" {
+    make_jpeg "$SRC/photo.jpg"
+    make_png_opaque "$SRC/shot.png"
+    make_video "$SRC/clip.mov"
+
+    run -0 mot optimize "$SRC" "$OUT"
+
+    [[ -z "$(find "$OUT" -name '.mot-tmp.*')" ]]
+}

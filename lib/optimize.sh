@@ -152,7 +152,7 @@ ext_allowed() {
 IMGCMD=()
 init_image_tool() {
     if command -v magick >/dev/null 2>&1; then
-        IMGCMD=(magick convert)
+        IMGCMD=(magick)
     elif command -v convert >/dev/null 2>&1 && convert --version 2>&1 | grep -qi imagemagick; then
         IMGCMD=(convert)
     else
@@ -175,6 +175,7 @@ trap cleanup EXIT INT TERM
 # ── Parallel pool ─────────────────────────────────────────────────────────────
 PARALLEL_JOBS=1
 PROGRESS_FILE=""   # path to resume progress file; empty = no tracking
+OPT_ROOT=""        # directory being optimized; progress entries are relative to it
 RESUME=0           # 1 when --resume was passed
 wait_for_slot() {
     while (( $(jobs -rp | wc -l) >= PARALLEL_JOBS )); do
@@ -222,106 +223,138 @@ collect_media_files() {
                 fi
                 ;;
         esac
-    done < <(find "$dir" -type f -printf '%s\0%p\0')
+    done < <(find "$dir" -type f -size +0 ! -name "${TMP_PREFIX}*" -printf '%s\0%p\0')
+}
+
+# ── Output placement ──────────────────────────────────────────────────────────
+readonly TMP_PREFIX=".mot-tmp."
+
+# Sets the variable named $1 to a temp path next to $2 with extension $3. The name is
+# hidden from the media scan and unique per worker process and source file.
+set_tmp_path() {
+    local -n _tmp_ref="$1"
+    _tmp_ref="${2%/*}/${TMP_PREFIX}${BASHPID}.${2##*/}.$3"
+}
+
+# Reserves a file name that does not exist yet: STEM.EXT, else STEM-1.EXT, STEM-2.EXT, ...
+# The empty placeholder is created with noclobber (O_EXCL), so parallel workers and
+# existing files are never overwritten. Prints the reserved path.
+reserve_free_path() {
+    local stem="$1" ext="$2" candidate="$1.$2" n=0
+    until (set -o noclobber && : >"$candidate") 2>/dev/null; do
+        n=$((n + 1))
+        if ((n > 999)); then
+            echo "Cannot find a free name for $stem.$ext" >&2
+            return 1
+        fi
+        candidate="$stem-$n.$ext"
+    done
+    printf '%s\n' "$candidate"
+}
+
+# Moves the finished temp file $1 into place for the source $2.
+# Same extension: replaces the source. New extension $3: reserves a free name and
+# removes the source afterwards. Prints the final path.
+install_result() {
+    local tmp="$1" src="$2" new_ext="${3:-}" dst
+    if [[ -z "$new_ext" ]]; then
+        mv -f -- "$tmp" "$src"
+        printf '%s\n' "$src"
+        return
+    fi
+    dst=$(reserve_free_path "${src%.*}" "$new_ext") || return 1
+    mv -f -- "$tmp" "$dst"
+    rm -f -- "$src"
+    printf '%s\n' "$dst"
+}
+
+# Records processed paths (relative to the optimized directory) for --resume.
+mark_done() {
+    if [[ -n "$PROGRESS_FILE" ]]; then
+        printf '%s\n' "$@" >>"$PROGRESS_FILE"
+    fi
 }
 
 # ── Per-file processors ───────────────────────────────────────────────────────
 
-# Optimize JPEG/WEBP in place, convert PNG → JPEG. Replaces only if result is smaller.
-# Writes result to $stats_file: "photo|rel|sz_before|sz_after"
+# Optimizes JPEG/WEBP in place and converts PNG to JPEG; keeps the result only if smaller.
+# Writes "photo|rel|bytes_before|bytes_after[|fail]" to $stats_file.
 optimize_photo() {
     local file="$1" rel="$2" stats_file="$3"
-    local ext="${file##*.}"; ext="${ext,,}"
-    local dst tmp
-
-    # PNG is converted to JPEG (much smaller for photos); other formats re-encode in place
-    if [[ "$ext" == "png" ]]; then
-        dst="${file%.*}.jpg"
-        tmp="${file%.*}.opt.${BASHPID}.jpg"   # explicit .jpg so ImageMagick outputs JPEG
-    else
-        dst="$file"
-        tmp="${file}.opt.${BASHPID}"
+    local ext="${file##*.}" new_ext=""
+    ext="${ext,,}"
+    if [[ "$ext" == png ]]; then
+        new_ext=jpg
     fi
 
-    local sz_before sz_after
+    local tmp sz_before sz_after out
+    set_tmp_path tmp "$file" "${new_ext:-$ext}"
     sz_before=$(stat -c%s -- "$file")
 
-    if run_convert -auto-orient +profile "!exif,*" \
+    if ! run_convert "$file" -auto-orient +profile "!exif,*" \
         -resize "${IMG_MAX_DIM}x${IMG_MAX_DIM}>" \
-        -quality "$JPEG_QUALITY" "$file" "$tmp" 2>/dev/null; then
-        sz_after=$(stat -c%s -- "$tmp" 2>/dev/null || echo 0)
-        if (( sz_after > 0 && sz_after < sz_before )); then
-            mv "$tmp" "$dst"
-            if [[ "$file" != "$dst" ]]; then
-                rm -f "$file"
-            fi
-            printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" > "$stats_file"
-            local _pout="$rel"
-            if [[ "$ext" == png ]]; then
-                _pout="${rel%.*}.jpg"
-            fi
-            if [[ -n "$PROGRESS_FILE" ]]; then
-                printf '%s\n' "$_pout" >> "$PROGRESS_FILE"
-            fi
-            return
-        fi
+        -quality "$JPEG_QUALITY" "$tmp" 2>/dev/null; then
+        rm -f -- "$tmp"
+        printf 'photo|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
+        return
     fi
-    rm -f "$tmp"
-    printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" > "$stats_file"
-    if [[ -n "$PROGRESS_FILE" ]]; then
-        printf '%s\n' "$rel" >> "$PROGRESS_FILE"
+
+    sz_after=$(stat -c%s -- "$tmp")
+    if ((sz_after == 0 || sz_after >= sz_before)); then
+        rm -f -- "$tmp"
+        printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
+        mark_done "$rel"
+        return
     fi
+
+    if ! out=$(install_result "$tmp" "$file" "$new_ext"); then
+        rm -f -- "$tmp"
+        printf 'photo|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
+        return
+    fi
+    printf 'photo|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" >"$stats_file"
+    mark_done "$rel" "${out#"$OPT_ROOT"/}"
 }
 
-# Convert video → MP4. Renames if source is not .mp4. Writes result to $stats_file.
+# Re-encodes a video to H.264/AAC MP4. Writes "video|rel|bytes_before|bytes_after[|fail]".
+# Failed videos are not marked done, so --resume retries them.
 convert_video() {
     local file="$1" rel="$2" stats_file="$3"
-    local ext="${file##*.}"; ext="${ext,,}"
-    local dst tmp
-
-    if [[ "$ext" == "mp4" ]]; then
-        dst="$file"; tmp="${file}.opt.${BASHPID}.mp4"
-    else
-        dst="${file%.*}.mp4"; tmp="${dst}.opt.${BASHPID}.mp4"
+    local ext="${file##*.}" new_ext=""
+    ext="${ext,,}"
+    if [[ "$ext" != mp4 ]]; then
+        new_ext=mp4
     fi
+
+    local tmp
+    set_tmp_path tmp "$file" mp4
     local scale="scale='if(gt(iw,${VIDEO_MAX_W}),${VIDEO_MAX_W},iw)':'if(gt(ih,${VIDEO_MAX_H}),${VIDEO_MAX_H},ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2"
 
-    # Suppress per-second stats when multiple videos run in parallel (output would interleave)
+    # Per-second progress would interleave when several videos run in parallel
     local stats_flag="-stats"
-    if (( PARALLEL_JOBS > 1 )); then
+    if ((PARALLEL_JOBS > 1)); then
         stats_flag="-nostats"
     fi
 
-    local sz_before sz_after
+    local sz_before sz_after out
     sz_before=$(stat -c%s -- "$file")
 
-    if ffmpeg -hide_banner -loglevel warning "$stats_flag" -y \
+    if ffmpeg -nostdin -hide_banner -loglevel warning "$stats_flag" -y \
         -i "$file" -vf "$scale" \
         -c:v libx264 -preset "$VIDEO_PRESET" -crf "$VIDEO_CRF" \
         -level:v 5.2 -fps_mode vfr \
         -pix_fmt yuv420p -movflags +faststart \
         -max_muxing_queue_size 4096 \
         -c:a aac -b:a "$AUDIO_BITRATE" "$tmp"; then
-        sz_after=$(stat -c%s -- "$tmp" 2>/dev/null || echo 0)
-        if (( sz_after > 0 )); then
-            mv "$tmp" "$dst"
-            if [[ "$file" != "$dst" ]]; then
-                rm -f "$file"
-            fi
-            printf 'video|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" > "$stats_file"
-            local _vout="${rel%.*}.mp4"
-            if [[ "$ext" == mp4 ]]; then
-                _vout="$rel"
-            fi
-            if [[ -n "$PROGRESS_FILE" ]]; then
-                printf '%s\n' "$_vout" >> "$PROGRESS_FILE"
-            fi
+        sz_after=$(stat -c%s -- "$tmp")
+        if ((sz_after > 0)) && out=$(install_result "$tmp" "$file" "$new_ext"); then
+            printf 'video|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" >"$stats_file"
+            mark_done "$rel" "${out#"$OPT_ROOT"/}"
             return
         fi
     fi
-    rm -f "$tmp"
-    printf 'video|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" > "$stats_file"
-    # Note: failed videos are NOT recorded in PROGRESS_FILE so they are retried on --resume
+    rm -f -- "$tmp"
+    printf 'video|%s|%d|%d|fail\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
 }
 
 # ── Top-savings report ────────────────────────────────────────────────────────
@@ -418,6 +451,9 @@ run_optimization() {
     local -a video_primary=() video_primary_sizes=()
     local -a video_other=() video_other_sizes=()
     local -a skipped_vid=() skipped_vid_sizes=()
+    OPT_ROOT="$dest"
+    # Temp files of an interrupted run are never complete results
+    find "$dest" -type f -name "${TMP_PREFIX}*" -delete
     collect_media_files "$dest"
 
     # Set up progress tracking for resume support
@@ -445,12 +481,7 @@ run_optimization() {
         for file in "${img_files[@]}"; do
             (( ++idx ))
             local rel="${file#"$dest"/}"
-            local _pext="${file##*.}"; _pext="${_pext,,}"
-            local _rel_out="$rel"
-            if [[ "$_pext" == png ]]; then
-                _rel_out="${rel%.*}.jpg"
-            fi
-            if [[ -n "${_done_files[$_rel_out]+x}" ]]; then
+            if [[ -n "${_done_files[$rel]+x}" ]]; then
                 printf '[%d/%d] [SKIP] %s\n' "$idx" "${#img_files[@]}" "$rel"
                 continue
             fi
@@ -472,12 +503,7 @@ run_optimization() {
         for file in "${all_videos[@]}"; do
             (( ++idx ))
             local rel="${file#"$dest"/}"
-            local _vext="${file##*.}"; _vext="${_vext,,}"
-            local _rel_out="${rel%.*}.mp4"
-            if [[ "$_vext" == mp4 ]]; then
-                _rel_out="$rel"
-            fi
-            if [[ -n "${_done_files[$_rel_out]+x}" ]]; then
+            if [[ -n "${_done_files[$rel]+x}" ]]; then
                 printf '[%d/%d] [SKIP] %s\n' "$idx" "${#all_videos[@]}" "$rel"
                 continue
             fi
