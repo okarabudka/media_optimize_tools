@@ -176,7 +176,7 @@ print_largest_files() {
     echo "Top $limit largest files (photos > ${photo_mb} MB, videos > ${video_mb} MB):"
     find "$target" -type f -printf '%s\t%p\n' | sort -t$'\t' -k1,1nr |
         awk -F'\t' -v pb="$photo_bytes" -v vb="$video_bytes" -v lim="$limit" '
-        count >= lim { exit }
+        count >= lim { next }  # read to the end: an early exit kills sort with SIGPIPE under pipefail
         {
             sz = $1 + 0; path = $2
             ext = tolower(path); sub(/.*\./, "", ext)

@@ -36,3 +36,12 @@ setup() {
     run -1 mot stats --depth x "$SRC"
     [[ "$output" == *"--depth must be an integer"* ]]
 }
+
+@test "stats handles more files than fit the top list" {
+    mkdir "$SRC/many"
+    (cd "$SRC/many" && touch file{1..30000}.txt)
+
+    run -0 mot stats --top-files 1 "$SRC"
+
+    [[ "$output" == *"Elapsed:"* ]]
+}
