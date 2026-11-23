@@ -38,12 +38,12 @@ make_png_alpha() {
         -alpha off -compose CopyOpacity -composite PNG32:"$1"
 }
 
-# One-second H.264/AAC clip; extra ffmpeg output options may follow the path.
+# One-second high-bitrate H.264/AAC clip; extra ffmpeg output options after the path override.
 make_video() {
     local path="$1"
     shift
     ffmpeg -nostdin -loglevel error -f lavfi -i testsrc=duration=1:size=128x96:rate=10 \
-        -f lavfi -i sine=duration=1 -c:v libx264 -crf 18 -c:a aac -shortest "$@" "$path"
+        -f lavfi -i sine=duration=1 -c:v libx264 -crf 10 -c:a aac -b:a 256k -shortest "$@" "$path"
 }
 
 # HEIC fixtures need a libheif encoder plugin, which only the test image installs.

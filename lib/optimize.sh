@@ -344,7 +344,8 @@ optimize_photo() {
     mark_done "$rel" "${out#"$OPT_ROOT"/}"
 }
 
-# Re-encodes a video to H.264/AAC MP4. Writes "video|rel|bytes_before|bytes_after[|fail]".
+# Re-encodes a video to H.264/AAC MP4 and keeps the result only if smaller; otherwise the
+# original stays, also as MOV/VOB. Writes "video|rel|bytes_before|bytes_after[|fail]".
 # Failed videos are not marked done, so --resume retries them.
 convert_video() {
     local file="$1" rel="$2" stats_file="$3"
@@ -375,6 +376,12 @@ convert_video() {
         -max_muxing_queue_size 4096 \
         -c:a aac -b:a "$AUDIO_BITRATE" "$tmp"; then
         sz_after=$(stat -c%s -- "$tmp")
+        if ((sz_after > 0 && sz_after >= sz_before)); then
+            rm -f -- "$tmp"
+            printf 'video|%s|%d|%d\n' "$rel" "$sz_before" "$sz_before" >"$stats_file"
+            mark_done "$rel"
+            return
+        fi
         if ((sz_after > 0)) && out=$(install_result "$tmp" "$file" "$new_ext"); then
             printf 'video|%s|%d|%d\n' "$rel" "$sz_before" "$sz_after" >"$stats_file"
             mark_done "$rel" "${out#"$OPT_ROOT"/}"

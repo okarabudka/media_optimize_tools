@@ -152,3 +152,14 @@ setup() {
     [[ "$(magick compare -metric AE "$SRC/logo.png" "$OUT/logo.png" null: 2>&1)" == 0* ]]
     [[ "$(magick identify -format '%[opaque]' "$OUT/logo.png")" == False ]]
 }
+
+@test "video is not replaced when the re-encode is larger" {
+    make_video "$SRC/small.mov" -crf 45 -b:a 32k
+    make_video "$SRC/small.mp4" -crf 45 -b:a 32k
+
+    run -0 mot optimize --crf 0 --preset ultrafast "$SRC" "$OUT"
+
+    [[ "$(checksum "$OUT/small.mov")" == "$(checksum "$SRC/small.mov")" ]]
+    [[ "$(checksum "$OUT/small.mp4")" == "$(checksum "$SRC/small.mp4")" ]]
+    [[ ! -e "$OUT/small-1.mp4" ]]
+}
