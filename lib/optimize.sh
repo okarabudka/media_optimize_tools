@@ -60,16 +60,16 @@ Options:
 
 Levels (--level):
   archive    Near-lossless. Only converts formats (MOV/VOB→MP4).
-             JPEG 95, no resize, CRF 18 slow 4K. Good for precious originals.
+             JPEG 95, no resize, CRF 20 slow 4K. Good for precious originals.
 
   moderate   Safe optimization. Loss barely noticeable. (default)
-             JPEG 88, max 8000px, CRF 23 medium 4K. Re-encodes all video.
+             JPEG 88, max 8000px, CRF 25 medium 4K. Re-encodes all video.
 
   aggressive Strong compression. Quality still acceptable for everyday use.
-             JPEG 80, max 3840px, CRF 26 medium 1080p. Re-encodes MP4/MKV too.
+             JPEG 80, max 3840px, CRF 28 medium 1080p. Re-encodes all video.
 
   maximum    Maximum space savings. Noticeable quality loss.
-             JPEG 70, max 2560px, CRF 28 medium 720p. Re-encodes everything.
+             JPEG 70, max 2560px, CRF 32 medium 720p. Re-encodes all video.
 
 Extension filters:
   --only-exts and --skip-exts are mutually exclusive.
@@ -663,7 +663,7 @@ run_dry_run() {
             "$(format_percent "$heic_sz" "$heic_est")"
     fi
     printf '%-10s  %5s files  %12s → %12s  ~%s\n' \
-        "MOV/VOB→MP4" "$(( ${#video_primary[@]} + ${#video_other[@]} ))" \
+        "MOV/VOB→MP4" "${#video_primary[@]}" \
         "$(format_bytes "$vid_sz")" "$(format_bytes "$vid_est")" \
         "$(format_percent "$vid_sz" "$vid_est")"
     if (( REENCODE_ALL_VIDEO && other_sz > 0 )); then

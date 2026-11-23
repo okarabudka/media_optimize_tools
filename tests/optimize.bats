@@ -9,13 +9,16 @@ setup() {
 @test "dry-run changes nothing and creates no destination" {
     make_jpeg "$SRC/photo.jpg"
     make_video "$SRC/clip.mov"
+    make_video "$SRC/other.mp4"
     local before
     before=$(checksum "$SRC/photo.jpg")
 
     run -0 mot optimize --dry-run "$SRC" "$OUT"
 
     [[ "$output" == *"DRY RUN"* ]]
-    [[ "$output" == *"Photos"*"1 files"* ]]
+    [[ "$output" =~ Photos\ +1\ files ]]
+    [[ "$output" =~ MOV/VOB→MP4\ +1\ files ]]
+    [[ "$output" =~ MP4/MKV\ +1\ files ]]
     [[ ! -e "$OUT" ]]
     [[ "$(checksum "$SRC/photo.jpg")" == "$before" ]]
     [[ -f "$SRC/clip.mov" ]]
@@ -231,5 +234,5 @@ setup() {
 
     run -0 mot optimize --dry-run --heic-to-jpeg "$SRC" "$OUT"
 
-    [[ "$output" == *"HEIC→JPEG"*"1 files"* ]]
+    [[ "$output" =~ HEIC→JPEG\ +1\ files ]]
 }
