@@ -1,0 +1,21 @@
+$ mot optimize --dry-run --level aggressive --heic-to-jpeg /data/Photos
+============================================
+Source      : /data/Photos
+Destination : /data/Photos_aggressive
+Level       : aggressive
+Settings    : JPEG/PNG 80  max-dim 3840px  CRF 28  preset medium  1920x1080  audio 192k
+============================================
+
+DRY RUN — no files will be copied or modified.
+Savings estimates are approximate (typical values, actual depends on content).
+
+Scanning /data/Photos ...
+
+Level       : aggressive
+
+Photos             18 files       33.9 MB →      26.5 MB  ~+22.0%
+HEIC to JPEG        8 files       14.3 MB →      21.4 MB  ~-50.0%
+MOV/VOB to MP4      3 files       26.2 MB →      13.1 MB  ~+50.0%
+MP4/MKV             1 files        3.6 MB →       2.4 MB  ~+35.0%
+──────────────────────────────────────────────────────────────────
+Total              30 files       78.0 MB →      63.3 MB  ~+18.8%

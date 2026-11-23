@@ -1,0 +1,77 @@
+$ mot stats --dupes --subdirs --top-files 10 --photo-mb 1 --video-mb 1 /data/Photos
+Analyzing: /data/Photos
+
+Directory usage (depth 2):
+4.0M	/data/Photos/Screenshots
+17M	/data/Photos/2024
+17M	/data/Photos/2024/Family
+28M	/data/Photos/2023
+28M	/data/Photos/2023/Holidays
+30M	/data/Photos/Videos
+79M	/data/Photos
+
+Top 10 largest files (photos > 1 MB, videos > 1 MB):
+     8.7 MB  /data/Photos/Videos/IMG_3001.MOV
+     8.7 MB  /data/Photos/Videos/IMG_3002.MOV
+     8.7 MB  /data/Photos/Videos/IMG_3003.MOV
+     3.6 MB  /data/Photos/Videos/clip_720p.mp4
+     2.3 MB  /data/Photos/2023/Holidays/IMG_1012.jpg
+     2.3 MB  /data/Photos/2023/Holidays/IMG_1008.jpg
+     2.3 MB  /data/Photos/2023/Holidays/IMG_1006.jpg
+     2.3 MB  /data/Photos/2023/Holidays/IMG_1009.jpg
+     2.3 MB  /data/Photos/2023/Holidays/IMG_1003.jpg
+     2.3 MB  /data/Photos/2023/Holidays/IMG_1004.jpg
+
+Files that need aggressive compression:
+  Photos > 1 MB | Videos/MOV > 1 MB | All MOV (need conversion)
+
+  [MOV     8.7 MB]  /data/Photos/Videos/IMG_3001.MOV
+  [MOV     8.7 MB]  /data/Photos/Videos/IMG_3002.MOV
+  [MOV     8.7 MB]  /data/Photos/Videos/IMG_3003.MOV
+  [video   3.6 MB]  /data/Photos/Videos/clip_720p.mp4
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1012.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1008.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1006.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1009.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1003.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1004.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1011.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1010.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1005.jpg
+  [photo   2.3 MB]  /data/Photos/2024/Family/IMG_1001 (copy).jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1001.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1007.jpg
+  [photo   2.3 MB]  /data/Photos/2023/Holidays/IMG_1002.jpg
+  [photo   2.0 MB]  /data/Photos/Screenshots/sticker_2.png
+  [photo   2.0 MB]  /data/Photos/Screenshots/sticker_1.png
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2004.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2008.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2001.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2003.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2006.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2002.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2005.HEIC
+  [photo   1.8 MB]  /data/Photos/2024/Family/IMG_2007.HEIC
+
+  Large photos : 23 files  48.2 MB
+  MOV files    : 3 files  26.2 MB
+  Large videos : 1 files  3.6 MB
+  Total        : 27 files  78.0 MB
+
+Duplicate files (by content hash):
+  [dup]  /data/Photos/2024/Family/IMG_1001 (copy).jpg
+
+  Duplicate groups : 1
+  Redundant files  : 1
+  Wasted space     : 2.3 MB
+
+Subdirectory summary (size / file count):
+
+  /data/Photos/2023                                      28M  12 files
+  /data/Photos/2024                                      17M  9 files
+  /data/Photos/Screenshots                              4.0M  5 files
+  /data/Photos/Videos                                    30M  4 files
+
+  Directories: 4   Total files: 30
+
+Elapsed: 0s
